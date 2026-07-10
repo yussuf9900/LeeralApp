@@ -1,0 +1,35 @@
+@startuml
+skinparam ActivityBackgroundColor #F1FAEE
+skinparam ActivityBorderColor #2A9D8F
+skinparam ActivityDiamondBackgroundColor #FFE8D6
+
+start
+:Réception de la demande de recharge (kWh);
+
+if (Est-ce la première recharge du mois civil en cours ?) then (Oui)
+    :Appliquer Redevance Fixe (429 F / 1427 F);
+    :Appliquer Taxe Communale;
+else (Non)
+    :Redevance et Taxe = 0 F;
+endif
+
+:Calcul Tranche 1 (0-150 kWh);
+note right: Application de la baisse\nde 10% (Décision CRSE);
+
+if (Consommation totale > 150 kWh ?) then (Oui)
+    :Calcul Tranche 2 (151-250 kWh);
+    
+    if (Consommation totale > 250 kWh ?) then (Oui)
+        :Calcul Tranche 3 (> 250 kWh);
+        :Calcul de la TVA (18%) **uniquement**\nsur la portion excédant 250 kWh;
+    else (Non)
+        :TVA = 0 F;
+    endif
+else (Non)
+    :TVA = 0 F;
+endif
+
+:Additionner : Montant Tranches + Redevance + TVA;
+:Générer la Facture TTC (decimal.js);
+stop
+@enduml

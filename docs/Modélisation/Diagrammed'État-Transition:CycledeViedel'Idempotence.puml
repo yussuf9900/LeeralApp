@@ -1,0 +1,23 @@
+@startuml
+skinparam StateBackgroundColor #FDF0D5
+skinparam StateBorderColor #D62828
+
+[*] --> INITIÉE : Réception du Payload HTTP
+
+INITIÉE --> VERROUILLÉE : Clé d'idempotence insérée\n(Statut = PENDING)
+note right of VERROUILLÉE
+  Si une requête avec la même clé arrive
+  pendant cet état, elle est mise en
+  attente ou rejetée (Verrouillage de ligne).
+end note
+
+VERROUILLÉE --> CALCUL_EN_COURS : Lancement des algorithmes\nSenelec ou Sen'Eau
+
+CALCUL_EN_COURS --> SUCCÈS : Calcul terminé et validé
+SUCCÈS --> JOURNALISÉE : Logs exportés via OpenTelemetry
+JOURNALISÉE --> [*] : Réponse HTTP 201 Created
+
+CALCUL_EN_COURS --> ÉCHEC : Erreur mathématique ou BDD
+ÉCHEC --> [*] : Rollback SQL + Réponse HTTP 500/400\n(Clé d'idempotence libérée)
+
+@enduml

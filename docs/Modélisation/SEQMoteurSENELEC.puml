@@ -1,0 +1,46 @@
+@startuml
+autonumber
+skinparam sequence {
+    ArrowColor #E76F51
+    ParticipantBackgroundColor #FDF0D5
+}
+
+participant "FacturationController" as API
+participant "SenelecCalculator" as Calc
+participant "Base de Données" as DB
+participant "MathUtils (decimal.js)" as Math
+participant "Google Cloud\nObservability" as Logger
+
+API -> Calc : calculerRecharge(payload: {kwh}, req.user.id)
+activate Calc
+
+Calc -> DB : SELECT count(id) FROM factures\nWHERE client_id=? AND extract(month from date_emission) = mois_en_cours
+DB --> Calc : nb_transactions_ce_mois
+
+alt nb_transactions_ce_mois == 0 (Première Recharge)
+    Calc -> Calc : Ajouter Redevance Fixe (ex: 429 F) + Taxe Communale
+else Recharges suivantes
+    Calc -> Calc : Redevance Fixe = 0 F
+end
+
+Calc -> DB : SELECT tarifs WHERE service = 'SENELEC' AND validite = NOW()
+DB --> Calc : Grille Tarifaire (incluant baisse -10% CRSE)
+
+Calc -> Math : calculerTranches(kwh, Grille)
+Math --> Calc : Montant Tranches 1, 2, 3
+
+alt Consommation > 250 kWh
+    Calc -> Math : calculerTVA(Excédent, 0.18)
+    Math --> Calc : Montant TVA
+else Consommation <= 250 kWh
+    Calc -> Calc : TVA = 0 F
+end
+
+Calc -> Math : additionnerTTC(Montants, TVA, Redevance)
+Math --> Calc : Total TTC (Numeric strict)
+
+Calc -> DB : UPDATE factures SET details=..., statut='SUCCESS' WHERE key=?
+Calc -> Logger : logTransaction(Facture, TraceID)
+Calc --> API : Facture Détaillée
+deactivate Calc
+@enduml

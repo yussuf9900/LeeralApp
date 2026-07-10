@@ -1,0 +1,39 @@
+ @startuml
+autonumber
+skinparam sequence {
+    ArrowColor #2A9D8F
+    ParticipantBackgroundColor #E0FBFC
+}
+
+participant "FacturationController" as API
+participant "SeneauCalculator" as Calc
+participant "Base de Données" as DB
+participant "MathUtils (decimal.js)" as Math
+participant "Google Cloud\nObservability" as Logger
+
+API -> Calc : calculerFactureEau(payload: {conso_m3, mode_paiement}, req.user.id)
+activate Calc
+
+Calc -> DB : SELECT ville_type, is_subvented FROM utilisateurs WHERE id=?
+DB --> Calc : ClientProfile (ex: VILLE_ASSAINIE)
+
+Calc -> DB : SELECT tarifs WHERE service = 'SENEAU' AND validite = NOW()
+DB --> Calc : Grille Tarifaire Sen'Eau
+
+Calc -> Math : repartirConsoSurTranchesBimestrielles(conso_m3, ville_type)
+Math --> Calc : Montant HT Eau
+
+alt payload.mode_paiement == 'CASH'
+    note right: Loi 2025: Droit de timbre
+    Calc -> Math : calculerPourcentage(Montant HT, 0.01)
+    Math --> Calc : fiscal_surcharge (1%)
+    Calc -> Calc : droit_de_timbre = fiscal_surcharge
+else Paiement Digital (Orange Money, etc.)
+    Calc -> Calc : droit_de_timbre = 0 F
+end
+
+Calc -> DB : UPDATE factures SET details=..., statut='SUCCESS' WHERE key=?
+Calc -> Logger : logTransaction(Facture, TraceID)
+Calc --> API : Facture Détaillée
+deactivate Calc
+@enduml

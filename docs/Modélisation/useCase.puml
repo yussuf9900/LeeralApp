@@ -1,0 +1,110 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+
+' Styles visuels professionnels
+skinparam rectangle {
+    BackgroundColor #F8F9FA
+    BorderColor #1D3557
+}
+skinparam usecase {
+    BackgroundColor #FFFFFF
+    BorderColor #457B9D
+    ArrowColor #E63946
+}
+
+actor "Client / Abonné" as Client
+actor "Administrateur" as Admin
+
+rectangle "Système de Facturation Multiservices (Senelec & Sen'Eau)" {
+    
+    package "Sécurité & Authentification" {
+        (S'authentifier via JWT) as UC_Auth
+        (Gérer les Comptes et Profils Utilisateurs) as UC_Users
+        (Consulter son Historique et Profil) as UC_ClientProfile
+    }
+
+    package "Moteur SENELEC (Woyofal)" {
+        (Calculer une Recharge Woyofal) as UC_Woyofal
+        (Vérifier le Cumul Mensuel des kWh) as UC_Check_Monthly
+        (Prélever la Redevance Fixe & Taxe Communale) as UC_Frais_Fixes
+        (Calculer la TVA de 18% sur l'excédent > 250 kWh) as UC_TVA_Senelec
+    }
+
+    package "Moteur SEN'EAU" {
+        (Calculer une Facture d'Eau Bimestrielle) as UC_Seneau
+        (Étaler les Tranches sur un Cycle de 60 jours) as UC_Cycle_60
+        (Appliquer la Tarification Géographique\n[Assainie / Non Assainie]) as UC_Geo
+        (Calculer la Caution de Branchement) as UC_Caution
+    }
+
+    package "Transversal : Sécurité, Fiscalité & Audit" {
+        (Valider l'Idempotence via Clé Unique) as UC_Idempotence
+        (Générer un Log Transactionnel Immuable) as UC_Log
+        (Appliquer la Surcharge Fiscale de 1%) as UC_Timbre
+    }
+    
+    package "Administration & Configuration" {
+        (Consulter le Dashboard de Suivi) as UC_Dashboard
+        (Gérer et Versionner les Grilles Tarifaires) as UC_Tarifs
+        (Exporter les Rapports d'Audit CRSE / SONES) as UC_Audit
+    }
+}
+
+' Interactions du Client
+Client --> UC_Auth
+Client --> UC_ClientProfile
+Client --> UC_Woyofal
+Client --> UC_Seneau
+Client --> UC_Caution
+
+' Interactions de l'Administrateur
+Admin --> UC_Auth
+Admin --> UC_Dashboard
+Admin --> UC_Users
+Admin --> UC_Tarifs
+Admin --> UC_Audit
+
+' Inclusions de sécurité Client (Contrôle d'accès JWT)
+UC_ClientProfile ..> UC_Auth : <<include>>
+UC_Woyofal ..> UC_Auth : <<include>>
+UC_Seneau ..> UC_Auth : <<include>>
+UC_Caution ..> UC_Auth : <<include>>
+
+' Inclusions de sécurité Admin (Contrôle d'accès JWT)
+UC_Dashboard ..> UC_Auth : <<include>>
+UC_Users ..> UC_Auth : <<include>>
+UC_Tarifs ..> UC_Auth : <<include>>
+UC_Audit ..> UC_Auth : <<include>>
+
+' Inclusions obligatoires pour le calcul Senelec
+UC_Woyofal ..> UC_Check_Monthly : <<include>>
+UC_Woyofal ..> UC_Frais_Fixes : <<include>>
+UC_Woyofal ..> UC_TVA_Senelec : <<include>>
+UC_Woyofal ..> UC_Idempotence : <<include>>
+UC_Woyofal ..> UC_Log : <<include>>
+
+' Inclusions obligatoires pour le calcul Sen'Eau
+UC_Seneau ..> UC_Cycle_60 : <<include>>
+UC_Seneau ..> UC_Geo : <<include>>
+UC_Seneau ..> UC_Idempotence : <<include>>
+UC_Seneau ..> UC_Log : <<include>>
+
+' Extensions conditionnelles pour la taxe de 1% (Loi 2025)
+UC_Timbre ..> UC_Woyofal : <<extend>>
+note on link
+  Condition:
+  Si paiement = CASH
+end note
+
+UC_Timbre ..> UC_Seneau : <<extend>>
+note on link
+  Condition:
+  Si paiement = CASH
+end note
+
+' Inclusions côté Administration
+UC_Audit ..> UC_Log : <<include>>
+
+@enduml

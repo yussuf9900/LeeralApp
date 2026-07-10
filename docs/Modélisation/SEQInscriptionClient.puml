@@ -1,0 +1,40 @@
+@startuml
+autonumber
+skinparam maxMessageSize 150
+skinparam sequence {
+    ArrowColor #2A9D8F
+    ParticipantBackgroundColor #F1FAEE
+}
+
+actor "Client (Visiteur)" as Client
+participant "AuthController" as API
+participant "BcryptUtils" as Crypto
+participant "Base de Données\n(PostgreSQL)" as DB
+participant "JwtService" as JWT
+
+Client -> API : POST /api/v1/auth/register\n{nom, email, password, is_subvented, ville_type}
+activate API
+
+API -> DB : SELECT id FROM utilisateurs WHERE email = ?
+activate DB
+DB --> API : null (Email disponible)
+deactivate DB
+
+API -> Crypto : hashPassword(password, 10)
+activate Crypto
+Crypto --> API : password_hash
+deactivate Crypto
+
+API -> DB : INSERT INTO utilisateurs (..., role) VALUES (..., 'CLIENT')
+activate DB
+DB --> API : new_user_id
+deactivate DB
+
+API -> JWT : genererToken({id: new_user_id, role: 'CLIENT'})
+activate JWT
+JWT --> API : token_string
+deactivate JWT
+
+API --> Client : 201 Created\n{ message: "Compte créé", token: "Bearer..." }
+deactivate API
+@enduml

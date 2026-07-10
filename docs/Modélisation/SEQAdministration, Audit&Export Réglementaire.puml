@@ -1,0 +1,32 @@
+@startuml
+autonumber
+skinparam sequence {
+    ArrowColor #D62828
+    ParticipantBackgroundColor #F1FAEE
+}
+
+actor "Administrateur" as Admin
+participant "AuditController" as API
+participant "AuthMiddleware" as Auth
+participant "Base de Données\n(PostgreSQL)" as DB
+participant "Google Cloud\nObservability APIs" as Telemetry
+
+Admin -> API : GET /api/v1/audit/rapport-annuel\nHeaders: [Authorization: Bearer AdminToken]
+activate API
+
+API -> Auth : restreindreA('ADMIN')
+Auth --> API : Validation Rôle OK (Next)
+
+API -> DB : SELECT * FROM factures WHERE date_emission BETWEEN(debut, fin)
+DB --> API : Historique PostgreSQL Brut (Montants, TVA, Timbre)
+
+API -> Telemetry : recupererTracesImmuables(Service Account Key, correlation_ids)
+activate Telemetry
+note right: Interrogation de l'API Cloud pour garantir\nque les logs n'ont pas été altérés en base.
+Telemetry --> API : Logs Transactionnels OpenTelemetry
+deactivate Telemetry
+
+API -> API : Consolider Données (Croisement PostgreSQL / Logs Cloud)
+API --> Admin : 200 OK (Rapport d'Audit CRSE/SONES)
+deactivate API
+@enduml

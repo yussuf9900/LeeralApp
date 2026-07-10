@@ -1,0 +1,179 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam monochrome false
+skinparam packageStyle rectangle
+left to right direction
+
+' Configuration des couleurs et styles professionnels
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #1D3557
+    ArrowColor #E63946
+}
+
+package "Core Entities (Persistance PostgreSQL)" {
+    
+    class Client {
+        + id: number
+        + nom: string
+        + isSubvented: boolean
+        + villeType: VilleType
+        + getProfilFacturation(): object
+    }
+
+    class Utilisateur {
+        + id: number
+        + nom: string
+        + email: string
+        + passwordHash: string
+        + role: Role
+        + createdAt: Date
+    }
+
+    class Tarif {
+        + id: number
+        + serviceType: ServiceType
+        + trancheNum: number
+        + seuilMax: Decimal
+        + prixUnitaire: Decimal
+        + effectiveDate: Date
+        + versionLabel: string
+        + estValide(date: Date): boolean
+    }
+
+    class Facture {
+        + id: number
+        + clientId: number
+        + utilisateurId: number -- ID de l'admin/agent ayant généré la facture
+        + idempotencyKey: string
+        + indexInitial: Decimal
+        + indexFinal: Decimal
+        + consommationKwhM3: Decimal
+        + montantHT: Decimal
+        + tva: Decimal
+        + redevanceFixe: Decimal
+        + droitDeTimbre: Decimal
+        + totalTTC: Decimal
+        + modePaiement: ModePaiement
+        + dateEmission: Date
+    }
+
+    enum Role {
+        ADMIN
+        AGENT_GUICHET
+    }
+
+    enum VilleType {
+        ASSAINIE
+        NON_ASSAINIE
+    }
+
+    enum ServiceType {
+        SENELEC
+        SENEAU
+    }
+
+    enum ModePaiement {
+        CASH
+        DIGITAL
+    }
+}
+
+package "Authentication & Authorization (JWT)" {
+    
+    class JwtService {
+        - SECRET_KEY: string
+        - EXPIRES_IN: string
+        + genererToken(payload: JwtPayload): string
+        + verifierToken(token: string): JwtPayload
+    }
+
+    class AuthMiddleware {
+        - jwtService: JwtService
+        + verifierAuthentification(req: Request, res: Response, next: NextFunction): void
+        + restreindreA(...roles: Role[]): Function
+    }
+
+    interface JwtPayload {
+        + userId: number
+        + role: Role
+    }
+}
+
+package "Business Logic Layer (Moteurs de Calcul)" {
+
+    interface IFacturationCalculator {
+        + calculer(payload: FacturationPayload): Promise<Facture>
+    }
+
+    class SenelecWoyofalCalculator implements IFacturationCalculator {
+        - REDEVANCE_MONOPHASE: Decimal = 429
+        - REDEVANCE_TRIPHASE: Decimal = 1427
+        - TAUX_TVA: Decimal = 0.18
+        - SEUIL_PIVOT_TVA: Decimal = 250
+        + calculer(payload: FacturationPayload): Promise<Facture>
+        - estPremiereRechargeDuMois(clientId: number, date: Date): Promise<boolean>
+    }
+
+    class SeneauCalculator implements IFacturationCalculator {
+        - TAUX_TIMBRE_CASH: Decimal = 0.01
+        + calculer(payload: FacturationPayload): Promise<Facture>
+        - appliquerTranchesBimestrielles(conso: Decimal, villeType: VilleType): Decimal
+        + calculerCautionBranchement(calibre: number, isSubvented: boolean): Decimal
+    }
+
+    class MathUtils {
+        + {static} safeAdd(a: Decimal, b: Decimal): Decimal
+        + {static} safeSubtract(a: Decimal, b: Decimal): Decimal
+        + {static} safeMultiply(a: Decimal, b: Decimal): Decimal
+    }
+}
+
+package "Infrastructure, Security & API" {
+
+    class AuthController {
+        - jwtService: JwtService
+        - db: Database
+        + login(req: Request, res: Response): Promise<void>
+        + modifierProfil(req: Request, res: Response): Promise<void>
+    }
+
+    class FacturationController {
+        - senelecCalc: SenelecWoyofalCalculator
+        - seneauCalc: SeneauCalculator
+        - idempotencyManager: IdempotencyManager
+        + handleSenelecCalculation(req: Request, res: Response): Promise<void>
+        + handleSeneauCalculation(req: Request, res: Response): Promise<void>
+    }
+
+    class IdempotencyManager {
+        - dbConnection: Database
+        + verifierCle(key: string): Promise<Facture | null>
+        + enregistrerFactureFinale(key: string, factureId: number): Promise<void>
+    }
+
+    class AuditLogger {
+        + {static} logTransaction(facture: Facture, metadata: any): void
+    }
+}
+
+' Relations et Dépendances
+Client "1" --> "*" Facture : possède
+Utilisateur "1" --> "*" Facture : génère
+Utilisateur --> Role
+
+FacturationController --> SenelecWoyofalCalculator : appelle
+FacturationController --> SeneauCalculator : appelle
+FacturationController --> IdempotencyManager : sécurise via
+
+' Liaisons de sécurité
+AuthMiddleware --> JwtService : utilise
+FacturationController ..> AuthMiddleware : protégé par
+AuthController --> JwtService : s'appuie sur
+
+SenelecWoyofalCalculator ..> MathUtils : utilise
+SeneauCalculator ..> MathUtils : utilise
+SenelecWoyofalCalculator ..> AuditLogger : consigne via
+SeneauCalculator ..> AuditLogger : consigne via
+
+@enduml

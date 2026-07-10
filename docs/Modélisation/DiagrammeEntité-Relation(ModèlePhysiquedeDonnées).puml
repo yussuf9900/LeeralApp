@@ -1,0 +1,56 @@
+@startuml
+' Paramètres visuels pour l'ERD
+skinparam linetype ortho
+skinparam EntityBackgroundColor #FFFFFF
+skinparam EntityBorderColor #1D3557
+
+entity "utilisateurs" as users {
+  * id : SERIAL [PK]
+  --
+  * email : VARCHAR(255) [UNIQUE]
+  * password_hash : VARCHAR(255)
+  * role : VARCHAR(50)
+  is_subvented : BOOLEAN
+  ville_type : VARCHAR(50)
+  created_at : TIMESTAMP
+}
+
+entity "tarifs" as tarifs {
+  * id : SERIAL [PK]
+  --
+  * service_type : VARCHAR(20)
+  * tranche_num : INTEGER
+  seuil_max : NUMERIC(10,2)
+  * prix_unitaire : NUMERIC(15,2)
+  * effective_date : DATE
+  version_label : VARCHAR(50)
+}
+
+entity "factures" as factures {
+  * id : SERIAL [PK]
+  --
+  * utilisateur_id : INTEGER [FK]
+  * idempotency_key : VARCHAR(255) [UNIQUE]
+  index_initial : NUMERIC(15,2)
+  index_final : NUMERIC(15,2)
+  * consommation_kwh_m3 : NUMERIC(15,2)
+  * montant_ht : NUMERIC(15,2)
+  * tva : NUMERIC(15,2)
+  redevance_fixe : NUMERIC(15,2)
+  droit_de_timbre : NUMERIC(15,2)
+  * total_ttc : NUMERIC(15,2)
+  * mode_paiement : VARCHAR(20)
+  * statut : VARCHAR(20)
+  date_emission : TIMESTAMP
+}
+
+' Relations
+users ||--o{ factures : "génère"
+tarifs }o--|| factures : "appliqué à (logique)"
+
+note bottom of factures
+  Contrainte stricte :
+  Utilisation exclusive de NUMERIC(15,2).
+  Interdiction formelle des types FLOAT/REAL.
+end note
+@enduml

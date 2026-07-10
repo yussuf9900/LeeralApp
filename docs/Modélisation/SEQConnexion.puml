@@ -1,0 +1,38 @@
+@startuml
+autonumber
+skinparam maxMessageSize 150
+skinparam sequence {
+    ArrowColor #264653
+    ParticipantBackgroundColor #F1FAEE
+}
+
+actor "Utilisateur\n(Client / Admin)" as User
+participant "AuthController" as API
+participant "Base de Données\n(PostgreSQL)" as DB
+participant "BcryptUtils" as Crypto
+participant "JwtService" as JWT
+
+User -> API : POST /api/v1/auth/login\n{email, password}
+activate API
+
+API -> DB : SELECT id, password_hash, role FROM utilisateurs WHERE email = ?
+activate DB
+DB --> API : user_data (ou null)
+deactivate DB
+
+alt user_data == null
+    API --> User : 401 Unauthorized (Email introuvable)
+else Utilisateur trouvé
+    API -> Crypto : compare(password, user_data.password_hash)
+    Crypto --> API : is_match (true/false)
+    
+    alt is_match == false
+        API --> User : 401 Unauthorized (Mot de passe incorrect)
+    else is_match == true
+        API -> JWT : genererToken({id, role})
+        JWT --> API : token_string
+        API --> User : 200 OK\n{ token: "Bearer eyJhb..." }
+    end
+end
+deactivate API
+@enduml

@@ -1,0 +1,53 @@
+-- Enable UUID generation extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Table: utilisateurs (Users)
+CREATE TABLE IF NOT EXISTS utilisateurs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nom VARCHAR(100) NOT NULL,
+    email VARCHAR(150) UNIQUE NOT NULL,
+    mot_de_passe VARCHAR(255) NOT NULL,
+    cree_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    mis_a_jour_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table: tarifs (Tariffs for Senelec & Sen'Eau)
+CREATE TABLE IF NOT EXISTS tarifs (
+    id SERIAL PRIMARY KEY,
+    service VARCHAR(50) NOT NULL, -- 'Senelec' or 'Sen_Eau'
+    type_tarif VARCHAR(50) NOT NULL, -- e.g., 'DOMESTIQUE_SOCIAL', 'DOMESTIQUE_NON_SOCIAL', 'COMMERCIAL', 'PROFESSIONNEL'
+    prix_par_unite NUMERIC(15,2) NOT NULL, -- Financial field
+    palier_debut NUMERIC(15,2) DEFAULT 0.00, -- Consumption field
+    palier_fin NUMERIC(15,2), -- Consumption field
+    cree_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table: factures (Bills / Invoices)
+CREATE TABLE IF NOT EXISTS factures (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    utilisateur_id UUID NOT NULL REFERENCES utilisateurs(id) ON DELETE CASCADE,
+    service VARCHAR(50) NOT NULL, -- 'Senelec' or 'Sen_Eau'
+    reference_facture VARCHAR(100) NOT NULL,
+    consommation NUMERIC(15,2) NOT NULL, -- Consumption field
+    montant_ht NUMERIC(15,2) NOT NULL, -- Financial field
+    tva NUMERIC(15,2) NOT NULL, -- Financial field
+    montant_ttc NUMERIC(15,2) NOT NULL, -- Financial field
+    statut VARCHAR(20) NOT NULL DEFAULT 'NON_PAYE', -- 'PAYE', 'NON_PAYE', 'ANNULE'
+    date_echeance DATE NOT NULL,
+    idempotency_key VARCHAR(255) UNIQUE NOT NULL, -- Strict uniqueness constraint for stateless billing
+    cree_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    paye_a TIMESTAMP WITH TIME ZONE
+);
+
+-- Basic indexes for query optimizations
+CREATE INDEX IF NOT EXISTS idx_factures_utilisateur_id ON factures(utilisateur_id);
+CREATE INDEX IF NOT EXISTS idx_factures_idempotency_key ON factures(idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_tarifs_service ON tarifs(service);
+
+-- Seed basic tariff values for Senelec & Sen'Eau
+INSERT INTO tarifs (service, type_tarif, prix_par_unite, palier_debut, palier_fin) VALUES
+('SENELEC', 'DOMESTIQUE_SOCIAL', 91.00, 0.00, 150.00),
+('SENELEC', 'DOMESTIQUE_NON_SOCIAL', 136.00, 150.00, NULL),
+('SENEAU', 'DOMESTIQUE_SOCIAL', 204.00, 0.00, 20.00),
+('SENEAU', 'DOMESTIQUE_NON_SOCIAL', 325.00, 20.00, NULL)
+ON CONFLICT DO NOTHING;

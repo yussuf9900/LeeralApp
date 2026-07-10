@@ -1,0 +1,42 @@
+@startuml
+autonumber
+skinparam sequence {
+    ArrowColor #264653
+    ParticipantBackgroundColor #E0FBFC
+}
+
+actor "Client Authentifié" as Client
+participant "FacturationController" as API
+participant "AuthMiddleware" as Auth
+participant "JwtService" as JWT
+participant "IdempotencyManager" as Idemp
+participant "Base de Données" as DB
+
+Client -> API : POST /api/v1/facturation\nHeaders: [Authorization: Bearer..., Idempotency-Key: uuid]
+activate API
+
+API -> Auth : verifierAuthentification(req.headers)
+activate Auth
+Auth -> JWT : verifierToken(token)
+JWT --> Auth : {id: 123, role: 'CLIENT'}
+Auth -> Auth : Injecter req.user.id = 123
+Auth --> API : Next()
+deactivate Auth
+
+API -> Idemp : verifierCle(req.headers['idempotency-key'])
+activate Idemp
+Idemp -> DB : SELECT * FROM factures WHERE idempotency_key = ?
+DB --> Idemp : Résultat
+
+alt Clé existante (Double clic / Retry réseau)
+    Idemp --> API : Ancienne Facture (Total TTC)
+    API --> Client : 200 OK (Retourne la facture de la base sans recalculer)
+else Nouvelle Clé
+    Idemp -> DB : INSERT factures (idempotency_key=uuid, statut='PENDING')
+    Idemp --> API : Clé verrouillée, calcul autorisé
+    deactivate Idemp
+    
+    note right of API: Le système passe ensuite le relais\naux Moteurs Senelec ou Sen'Eau (Voir Diag 4 & 5)
+end
+deactivate API
+@enduml
