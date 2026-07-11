@@ -1,5 +1,7 @@
 import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
 import apiRouter from './routes';
 import { testConnection } from './config/database';
 
@@ -28,6 +30,18 @@ app.get('/health', (req: Request, res: Response) => {
 
 // API Routes
 app.use('/api/v1', apiRouter);
+
+// Serve static frontend files if compiled
+const frontendDistPath = path.join(__dirname, '../frontend/dist');
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  app.get(/.*/, (req: Request, res: Response) => {
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
+  console.log(`Serving frontend static files from ${frontendDistPath}`);
+} else {
+  console.log('Frontend static files not found, API only mode active.');
+}
 
 // Start server and test connection
 app.listen(PORT, async () => {
