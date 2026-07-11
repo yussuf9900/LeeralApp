@@ -53,20 +53,43 @@ export class SenelecWoyofalCalculator {
       throw new Error('La consommation ne peut pas être négative');
     }
 
-    // 1. Fetch Senelec tariffs from database to be dynamic
+    // Fetch active parameters for Senelec
+    const configRes = await pool.query(
+      `SELECT DISTINCT ON (cle) cle, valeur 
+       FROM configurations 
+       WHERE cle IN ('senelec_seuil_tva', 'senelec_reduction_t1')
+       ORDER BY cle, effective_date DESC`
+    );
+
+    let seuilTva = new Decimal(250);
+    let reductionT1 = new Decimal(0.10); // 10% reduction default
+
+    for (const row of configRes.rows) {
+      if (row.cle === 'senelec_seuil_tva') {
+        seuilTva = new Decimal(row.valeur);
+      } else if (row.cle === 'senelec_reduction_t1') {
+        reductionT1 = new Decimal(row.valeur);
+      }
+    }
+
+    // 1. Fetch Senelec tariffs from database to be dynamic (versioned)
     const tariffRes = await pool.query(
-      `SELECT * FROM tarifs WHERE service = 'SENELEC' ORDER BY palier_debut ASC`
+      `SELECT DISTINCT ON (type_tarif) * 
+       FROM tarifs 
+       WHERE service = 'SENELEC' AND effective_date <= CURRENT_TIMESTAMP
+       ORDER BY type_tarif, effective_date DESC`
     );
     
     if (tariffRes.rows.length < 2) {
       throw new Error('Grille tarifaire Senelec incomplète ou manquante en base de données');
     }
 
-    const t1Db = tariffRes.rows[0]; // Domestic Social (0 - 150)
-    const t2Db = tariffRes.rows[1]; // Domestic Non Social (150+)
+    const sortedTariffs = tariffRes.rows.sort((a, b) => Number(a.palier_debut) - Number(b.palier_debut));
+    const t1Db = sortedTariffs[0]; // Domestic Social (0 - 150)
+    const t2Db = sortedTariffs[1]; // Domestic Non Social (150+)
 
-    // Apply the 10% discount on Tranche 1 (CRSE N°2025-140)
-    const priceT1 = MathUtils.safeMultiply(t1Db.prix_par_unite, new Decimal(0.9));
+    // Apply the dynamic discount on Tranche 1
+    const priceT1 = MathUtils.safeMultiply(t1Db.prix_par_unite, new Decimal(1).minus(reductionT1));
     const priceT2 = new Decimal(t2Db.prix_par_unite);
 
     let htSubjectToTva = new Decimal(0);
@@ -92,9 +115,9 @@ export class SenelecWoyofalCalculator {
     // Municipal Tax (2.5% of HT)
     const taxeCommunale = MathUtils.safeMultiply(montantHt, this.TAXE_COMMUNALE_RATE);
 
-    // 3. Calculate TVA: 18% only on consumption exceeding 250 kWh
-    if (conso.gt(this.SEUIL_PIVOT_TVA)) {
-      const excessConso = MathUtils.safeSubtract(conso, this.SEUIL_PIVOT_TVA);
+    // 3. Calculate TVA: 18% only on consumption exceeding dynamic pivot threshold
+    if (conso.gt(seuilTva)) {
+      const excessConso = MathUtils.safeSubtract(conso, seuilTva);
       // The excess consumption is priced at Tranche 2 rate
       htSubjectToTva = MathUtils.safeMultiply(excessConso, priceT2);
     }

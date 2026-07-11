@@ -37,6 +37,9 @@ router.get('/admin/tarifs', authMiddleware, restrictTo('ADMIN'), AdminController
 router.post('/admin/tarifs', authMiddleware, restrictTo('ADMIN'), AdminController.createTariff);
 router.put('/admin/tarifs/:id', authMiddleware, restrictTo('ADMIN'), AdminController.updateTariff);
 
+router.get('/admin/configurations', authMiddleware, restrictTo('ADMIN'), AdminController.getConfigurations);
+router.put('/admin/configurations/:cle', authMiddleware, restrictTo('ADMIN'), AdminController.updateConfiguration);
+
 router.get('/admin/audit/rapport-annuel', authMiddleware, restrictTo('ADMIN'), AdminController.getAuditReport);
 
 export default router;

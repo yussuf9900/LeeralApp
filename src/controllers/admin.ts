@@ -139,40 +139,93 @@ export class AdminController {
   }
 
   /**
-   * Update an existing tariff
+   * Update a tariff (creates a new active version to keep history intact)
    */
   static async updateTariff(req: Request, res: Response): Promise<any> {
     const { id } = req.params;
-    const { prix_par_unite, palier_debut, palier_fin } = req.body;
+    const { prix_par_unite, palier_debut, palier_fin, effective_date } = req.body;
 
     try {
-      const checkTariff = await pool.query('SELECT id FROM tarifs WHERE id = $1', [id]);
+      // Find the existing tariff to clone its other columns
+      const checkTariff = await pool.query('SELECT * FROM tarifs WHERE id = $1', [id]);
       if (checkTariff.rows.length === 0) {
         return res.status(404).json({ error: 'Tarif introuvable.' });
       }
 
-      const updateQuery = `
-        UPDATE tarifs 
-        SET prix_par_unite = COALESCE($1, prix_par_unite),
-            palier_debut = COALESCE($2, palier_debut),
-            palier_fin = $3
-        WHERE id = $4
+      const oldTariff = checkTariff.rows[0];
+
+      // Insert a new row (version) instead of updating the existing one
+      const insertQuery = `
+        INSERT INTO tarifs (service, type_tarif, prix_par_unite, palier_debut, palier_fin, effective_date)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
       `;
-      const result = await pool.query(updateQuery, [
-        prix_par_unite,
-        palier_debut,
-        palier_fin,
-        id
+      const result = await pool.query(insertQuery, [
+        oldTariff.service,
+        oldTariff.type_tarif,
+        prix_par_unite !== undefined ? Number(prix_par_unite) : Number(oldTariff.prix_par_unite),
+        palier_debut !== undefined ? Number(palier_debut) : Number(oldTariff.palier_debut),
+        palier_fin !== undefined && palier_fin !== null ? Number(palier_fin) : oldTariff.palier_fin,
+        effective_date ? new Date(effective_date) : new Date()
       ]);
 
       res.status(200).json({
-        message: 'Tarif mis à jour avec succès.',
+        message: 'Nouvelle version du tarif enregistrée avec succès.',
         tariff: result.rows[0]
       });
+    } catch (err: any) {
+      console.error('Error updating tariff (versioning):', err);
+      res.status(500).json({ error: 'Erreur lors de la création de la version du tarif.' });
+    }
+  }
+
+  /**
+   * Get latest configuration parameters
+   */
+  static async getConfigurations(req: Request, res: Response): Promise<any> {
+    try {
+      const result = await pool.query(`
+        SELECT DISTINCT ON (cle) cle, valeur, effective_date 
+        FROM configurations 
+        ORDER BY cle, effective_date DESC
+      `);
+      res.status(200).json(result.rows);
     } catch (err) {
-      console.error('Error updating tariff:', err);
-      res.status(500).json({ error: 'Erreur lors de la mise à jour du tarif.' });
+      console.error('Error fetching configurations:', err);
+      res.status(500).json({ error: 'Erreur lors du chargement des configurations.' });
+    }
+  }
+
+  /**
+   * Create a new configuration version
+   */
+  static async updateConfiguration(req: Request, res: Response): Promise<any> {
+    const { cle } = req.params;
+    const { valeur, effective_date } = req.body;
+
+    if (valeur === undefined) {
+      return res.status(400).json({ error: 'La valeur est requise.' });
+    }
+
+    try {
+      const insertQuery = `
+        INSERT INTO configurations (cle, valeur, effective_date)
+        VALUES ($1, $2, $3)
+        RETURNING *
+      `;
+      const result = await pool.query(insertQuery, [
+        cle,
+        Number(valeur),
+        effective_date ? new Date(effective_date) : new Date()
+      ]);
+
+      res.status(200).json({
+        message: 'Nouvelle version de la configuration enregistrée avec succès.',
+        configuration: result.rows[0]
+      });
+    } catch (err) {
+      console.error('Error updating configuration:', err);
+      res.status(500).json({ error: 'Erreur lors de l\'enregistrement de la configuration.' });
     }
   }
 

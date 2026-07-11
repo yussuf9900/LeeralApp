@@ -75,9 +75,12 @@ export class SeneauCalculator {
     const { is_subvented, ville_type } = userRes.rows[0];
     const isAssainie = ville_type === 'ASSAINIE';
 
-    // 2. Fetch Sen'Eau tariffs from database
+    // 2. Fetch Sen'Eau tariffs from database to be dynamic (versioned)
     const tariffRes = await pool.query(
-      `SELECT * FROM tarifs WHERE service = 'SENEAU' ORDER BY palier_debut ASC`
+      `SELECT DISTINCT ON (type_tarif) * 
+       FROM tarifs 
+       WHERE service = 'SENEAU' AND effective_date <= CURRENT_TIMESTAMP
+       ORDER BY type_tarif, effective_date DESC`
     );
 
     if (tariffRes.rows.length < 6) {
