@@ -67,6 +67,10 @@ Trois tables principales ont été définies :
 * [x] Dockerfile multi-stage et docker-compose.yml créés et validés.
 * [x] Stack déployée avec succès en mode dev.
 * [x] Healthcheck de l'API validé à 100% sur `http://localhost:3001/health`.
+* [x] Branche `dev` créée et fusion de `implement/init-architecture` effectuée.
+* [x] Création de la branche de travail `implement/core-database`.
+* [x] Configuration du pool PostgreSQL via `pg` ([src/config/database.ts](file:///home/ichigo/Bureau/PROJETS-PERSO/Leeral/src/config/database.ts)).
+* [x] Modélisation et typage strict des interfaces TypeScript ([src/models/index.ts](file:///home/ichigo/Bureau/PROJETS-PERSO/Leeral/src/models/index.ts)).
 
 ---
 
