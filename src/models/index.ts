@@ -6,6 +6,9 @@ export interface Utilisateur {
   nom: string;
   email: string;
   mot_de_passe: string; // password_hash
+  role: 'ADMIN' | 'CLIENT';
+  is_subvented: boolean;
+  ville_type: 'ASSAINIE' | 'NON_ASSAINIE';
   cree_a?: Date;
   mis_a_jour_a?: Date;
 }
@@ -33,7 +36,10 @@ export interface Facture {
   consommation: number | string | Decimal; // Consumption field
   montant_ht: number | string | Decimal; // Financial field
   tva: number | string | Decimal; // Financial field
+  redevance: number | string | Decimal; // Financial field
+  droit_de_timbre: number | string | Decimal; // Financial field
   montant_ttc: number | string | Decimal; // Financial field
+  mode_paiement: 'CASH' | 'DIGITAL';
   statut: 'PAYE' | 'NON_PAYE' | 'ANNULE';
   date_echeance: Date | string;
   idempotency_key: string; // Strict uniqueness constraint for stateless billing

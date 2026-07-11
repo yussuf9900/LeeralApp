@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS utilisateurs (
     nom VARCHAR(100) NOT NULL,
     email VARCHAR(150) UNIQUE NOT NULL,
     mot_de_passe VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL DEFAULT 'CLIENT',
+    is_subvented BOOLEAN NOT NULL DEFAULT false,
+    ville_type VARCHAR(50) NOT NULL DEFAULT 'NON_ASSAINIE',
     cree_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     mis_a_jour_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -31,7 +34,10 @@ CREATE TABLE IF NOT EXISTS factures (
     consommation NUMERIC(15,2) NOT NULL, -- Consumption field
     montant_ht NUMERIC(15,2) NOT NULL, -- Financial field
     tva NUMERIC(15,2) NOT NULL, -- Financial field
+    redevance NUMERIC(15,2) NOT NULL DEFAULT 0.00, -- Financial field
+    droit_de_timbre NUMERIC(15,2) NOT NULL DEFAULT 0.00, -- Financial field
     montant_ttc NUMERIC(15,2) NOT NULL, -- Financial field
+    mode_paiement VARCHAR(20) NOT NULL DEFAULT 'DIGITAL', -- 'CASH' or 'DIGITAL'
     statut VARCHAR(20) NOT NULL DEFAULT 'NON_PAYE', -- 'PAYE', 'NON_PAYE', 'ANNULE'
     date_echeance DATE NOT NULL,
     idempotency_key VARCHAR(255) UNIQUE NOT NULL, -- Strict uniqueness constraint for stateless billing
@@ -47,7 +53,11 @@ CREATE INDEX IF NOT EXISTS idx_tarifs_service ON tarifs(service);
 -- Seed basic tariff values for Senelec & Sen'Eau
 INSERT INTO tarifs (service, type_tarif, prix_par_unite, palier_debut, palier_fin) VALUES
 ('SENELEC', 'DOMESTIQUE_SOCIAL', 91.00, 0.00, 150.00),
-('SENELEC', 'DOMESTIQUE_NON_SOCIAL', 136.00, 150.00, NULL),
-('SENEAU', 'DOMESTIQUE_SOCIAL', 204.00, 0.00, 20.00),
-('SENEAU', 'DOMESTIQUE_NON_SOCIAL', 325.00, 20.00, NULL)
+('SENELEC', 'DOMESTIQUE_NON_SOCIAL', 136.49, 150.00, NULL),
+('SENEAU', 'SOCIAL_ASSAINIE', 202.00, 0.00, 20.00),
+('SENEAU', 'SOCIAL_NON_ASSAINIE', 188.50, 0.00, 20.00),
+('SENEAU', 'PLEINE_ASSAINIE', 697.97, 20.00, 40.00),
+('SENEAU', 'PLEINE_NON_ASSAINIE', 636.34, 20.00, 40.00),
+('SENEAU', 'DISSUASIVE_ASSAINIE', 878.35, 40.00, NULL),
+('SENEAU', 'DISSUASIVE_NON_ASSAINIE', 778.87, 40.00, NULL)
 ON CONFLICT DO NOTHING;
