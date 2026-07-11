@@ -21,11 +21,25 @@ export class AdminController {
   }
 
   /**
-   * Update user details (admin command)
+   * Update user details (admin command or user updating their own profile)
    */
   static async updateUser(req: Request, res: Response): Promise<any> {
     const { id } = req.params;
     const { nom, role, is_subvented, ville_type } = req.body;
+    const userPayload = (req as any).user;
+
+    if (!userPayload) {
+      return res.status(401).json({ error: 'Non authentifié.' });
+    }
+
+    if (userPayload.role !== 'ADMIN') {
+      if (userPayload.id !== id) {
+        return res.status(403).json({ error: 'Accès interdit : vous ne pouvez modifier que votre propre profil.' });
+      }
+      if (role && role !== userPayload.role) {
+        return res.status(403).json({ error: 'Accès interdit : vous ne pouvez pas modifier votre rôle.' });
+      }
+    }
 
     try {
       const checkUser = await pool.query('SELECT * FROM utilisateurs WHERE id = $1', [id]);

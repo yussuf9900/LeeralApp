@@ -9,6 +9,9 @@ export interface SeneauCalculationResult {
   redevance: Decimal; // Can be caution de branchement if requested
   droit_de_timbre: Decimal;
   montant_ttc: Decimal;
+  montant_social: Decimal;
+  montant_pleine: Decimal;
+  montant_dissuasive: Decimal;
 }
 
 export class SeneauCalculator {
@@ -82,13 +85,6 @@ export class SeneauCalculator {
     }
 
     // Map database tariffs
-    // The query returns ordered by palier_debut:
-    // Index 0: SOCIAL_ASSAINIE (0-20)
-    // Index 1: SOCIAL_NON_ASSAINIE (0-20)
-    // Index 2: PLEINE_ASSAINIE (20-40)
-    // Index 3: PLEINE_NON_ASSAINIE (20-40)
-    // Index 4: DISSUASIVE_ASSAINIE (40+)
-    // Index 5: DISSUASIVE_NON_ASSAINIE (40+)
     const tSocial = tariffRes.rows.find(t => t.type_tarif === (isAssainie ? 'SOCIAL_ASSAINIE' : 'SOCIAL_NON_ASSAINIE'));
     const tPleine = tariffRes.rows.find(t => t.type_tarif === (isAssainie ? 'PLEINE_ASSAINIE' : 'PLEINE_NON_ASSAINIE'));
     const tDissuasive = tariffRes.rows.find(t => t.type_tarif === (isAssainie ? 'DISSUASIVE_ASSAINIE' : 'DISSUASIVE_NON_ASSAINIE'));
@@ -105,23 +101,25 @@ export class SeneauCalculator {
     const limitSocial = new Decimal(20);
     const limitPleine = new Decimal(40);
 
-    let montantHt = new Decimal(0);
+    let montantSocial = new Decimal(0);
+    let montantPleine = new Decimal(0);
+    let montantDissuasive = new Decimal(0);
 
     // 3. Compute progressive brackets
     if (conso.lte(limitSocial)) {
-      montantHt = MathUtils.safeMultiply(conso, priceSocial);
+      montantSocial = MathUtils.safeMultiply(conso, priceSocial);
     } else if (conso.lte(limitPleine)) {
-      const htSocial = MathUtils.safeMultiply(limitSocial, priceSocial);
+      montantSocial = MathUtils.safeMultiply(limitSocial, priceSocial);
       const remainingConso = MathUtils.safeSubtract(conso, limitSocial);
-      const htPleine = MathUtils.safeMultiply(remainingConso, pricePleine);
-      montantHt = MathUtils.safeAdd(htSocial, htPleine);
+      montantPleine = MathUtils.safeMultiply(remainingConso, pricePleine);
     } else {
-      const htSocial = MathUtils.safeMultiply(limitSocial, priceSocial);
-      const htPleine = MathUtils.safeMultiply(MathUtils.safeSubtract(limitPleine, limitSocial), pricePleine);
+      montantSocial = MathUtils.safeMultiply(limitSocial, priceSocial);
+      montantPleine = MathUtils.safeMultiply(MathUtils.safeSubtract(limitPleine, limitSocial), pricePleine);
       const remainingConso = MathUtils.safeSubtract(conso, limitPleine);
-      const htDissuasive = MathUtils.safeMultiply(remainingConso, priceDissuasive);
-      montantHt = MathUtils.safeAdd(MathUtils.safeAdd(htSocial, htPleine), htDissuasive);
+      montantDissuasive = MathUtils.safeMultiply(remainingConso, priceDissuasive);
     }
+
+    const montantHt = MathUtils.safeAdd(MathUtils.safeAdd(montantSocial, montantPleine), montantDissuasive);
 
     // 4. TVA: 0% by default for domestic/particular contracts
     const tva = new Decimal(0);
@@ -149,6 +147,9 @@ export class SeneauCalculator {
       redevance: MathUtils.roundFinancial(redevance),
       droit_de_timbre: MathUtils.roundFinancial(droitDeTimbre),
       montant_ttc: MathUtils.roundFinancial(montantTtc),
+      montant_social: MathUtils.roundFinancial(montantSocial),
+      montant_pleine: MathUtils.roundFinancial(montantPleine),
+      montant_dissuasive: MathUtils.roundFinancial(montantDissuasive),
     };
   }
 }

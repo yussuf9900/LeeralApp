@@ -29,15 +29,17 @@ export class FacturationController {
    * Handle Senelec Woyofal bill creation
    */
   static async handleSenelecCalculation(req: Request, res: Response): Promise<any> {
-    const { consommation, mode_paiement, client_id } = req.body;
-    const idempotencyKey = FacturationController.getIdempotencyKey(req);
+    const { consommation, mode_paiement, client_id, save_to_history, ancien_index, nouvel_index } = req.body;
+    const saveToHistory = save_to_history !== false;
 
-    if (!idempotencyKey) {
-      return res.status(400).json({ error: 'La clé d\'idempotence (header Idempotency-Key) est requise pour cette transaction.' });
+    // Resolve consumption if indexes are sent
+    let conso = consommation;
+    if (conso === undefined && ancien_index !== undefined && nouvel_index !== undefined) {
+      conso = Number(nouvel_index) - Number(ancien_index);
     }
 
-    if (consommation === undefined || !mode_paiement) {
-      return res.status(400).json({ error: 'Champs consommation et mode_paiement requis.' });
+    if (conso === undefined || !mode_paiement) {
+      return res.status(400).json({ error: 'Champs consommation (ou index) et mode_paiement requis.' });
     }
 
     if (mode_paiement !== 'CASH' && mode_paiement !== 'DIGITAL') {
@@ -45,7 +47,40 @@ export class FacturationController {
     }
 
     try {
-      // 1. Check idempotency shield
+      // Resolve client ID
+      const targetClientId = FacturationController.resolveClientId(req, client_id);
+      
+      // Verify client exists
+      const clientCheck = await pool.query('SELECT id FROM utilisateurs WHERE id = $1', [targetClientId]);
+      if (clientCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Client introuvable.' });
+      }
+
+      // 1. If only calculating preview (save_to_history = false), return calculation details immediately
+      if (!saveToHistory) {
+        const calc = await SenelecWoyofalCalculator.calculer(targetClientId, conso, mode_paiement);
+        return res.status(200).json({
+          details: {
+            consommation: Number(calc.consommation),
+            montant_ht: Number(calc.montant_ht),
+            tva: Number(calc.tva),
+            redevance: Number(calc.redevance),
+            droit_de_timbre: Number(calc.droit_de_timbre),
+            montant_ttc: Number(calc.montant_ttc),
+            montant_t1: Number(calc.montant_t1),
+            montant_t2: Number(calc.montant_t2),
+            montant_t3: Number(calc.montant_t3),
+            taxe_communale: Number(calc.taxe_communale),
+          }
+        });
+      }
+
+      // 2. Otherwise, check idempotency and save to database
+      const idempotencyKey = FacturationController.getIdempotencyKey(req);
+      if (!idempotencyKey) {
+        return res.status(400).json({ error: 'La clé d\'idempotence (header Idempotency-Key) est requise pour cette transaction.' });
+      }
+
       const existingFacture = await IdempotencyManager.verifierCle(idempotencyKey);
       if (existingFacture) {
         return res.status(200).json({
@@ -55,19 +90,8 @@ export class FacturationController {
         });
       }
 
-      // 2. Resolve client ID
-      const targetClientId = FacturationController.resolveClientId(req, client_id);
-      
-      // Verify client exists
-      const clientCheck = await pool.query('SELECT id FROM utilisateurs WHERE id = $1', [targetClientId]);
-      if (clientCheck.rows.length === 0) {
-        return res.status(404).json({ error: 'Client introuvable.' });
-      }
+      const calc = await SenelecWoyofalCalculator.calculer(targetClientId, conso, mode_paiement);
 
-      // 3. Compute costs
-      const calc = await SenelecWoyofalCalculator.calculer(targetClientId, consommation, mode_paiement);
-
-      // 4. Save to DB
       const ref = `SEN-WOY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
       const echeance = new Date();
       echeance.setDate(echeance.getDate() + 15); // 15 days deadline for payment or immediately paid
@@ -77,9 +101,9 @@ export class FacturationController {
           utilisateur_id, service, reference_facture, consommation, 
           montant_ht, tva, redevance, droit_de_timbre, 
           montant_ttc, mode_paiement, statut, date_echeance, 
-          idempotency_key, paye_a
+          idempotency_key, paye_a, ancien_index, nouvel_index, taxe_communale
         )
-        VALUES ($1, 'SENELEC', $2, $3, $4, $5, $6, $7, $8, $9, 'PAYE', $10, $11, CURRENT_TIMESTAMP)
+        VALUES ($1, 'SENELEC', $2, $3, $4, $5, $6, $7, $8, $9, 'PAYE', $10, $11, CURRENT_TIMESTAMP, $12, $13, $14)
         RETURNING *
       `;
 
@@ -94,12 +118,27 @@ export class FacturationController {
         calc.montant_ttc.toString(),
         mode_paiement,
         echeance,
-        idempotencyKey
+        idempotencyKey,
+        ancien_index !== undefined ? Number(ancien_index) : 0,
+        nouvel_index !== undefined ? Number(nouvel_index) : 0,
+        calc.taxe_communale.toString()
       ]);
 
       res.status(201).json({
         message: 'Recharge Woyofal générée avec succès.',
         facture: result.rows[0],
+        details: {
+          consommation: Number(calc.consommation),
+          montant_ht: Number(calc.montant_ht),
+          tva: Number(calc.tva),
+          redevance: Number(calc.redevance),
+          droit_de_timbre: Number(calc.droit_de_timbre),
+          montant_ttc: Number(calc.montant_ttc),
+          montant_t1: Number(calc.montant_t1),
+          montant_t2: Number(calc.montant_t2),
+          montant_t3: Number(calc.montant_t3),
+          taxe_communale: Number(calc.taxe_communale),
+        },
         idempotent: false
       });
 
@@ -113,15 +152,17 @@ export class FacturationController {
    * Handle Seneau Water bill creation
    */
   static async handleSeneauCalculation(req: Request, res: Response): Promise<any> {
-    const { consommation, mode_paiement, client_id, include_caution, calibre } = req.body;
-    const idempotencyKey = FacturationController.getIdempotencyKey(req);
+    const { consommation, mode_paiement, client_id, include_caution, calibre, save_to_history, ancien_index, nouvel_index } = req.body;
+    const saveToHistory = save_to_history !== false;
 
-    if (!idempotencyKey) {
-      return res.status(400).json({ error: 'La clé d\'idempotence (header Idempotency-Key) est requise.' });
+    // Resolve consumption if indexes are sent
+    let conso = consommation;
+    if (conso === undefined && ancien_index !== undefined && nouvel_index !== undefined) {
+      conso = Number(nouvel_index) - Number(ancien_index);
     }
 
-    if (consommation === undefined || !mode_paiement) {
-      return res.status(400).json({ error: 'Champs consommation et mode_paiement requis.' });
+    if (conso === undefined || !mode_paiement) {
+      return res.status(400).json({ error: 'Champs consommation (ou index) et mode_paiement requis.' });
     }
 
     if (mode_paiement !== 'CASH' && mode_paiement !== 'DIGITAL') {
@@ -133,7 +174,42 @@ export class FacturationController {
     }
 
     try {
-      // 1. Check idempotency shield
+      // Resolve client ID
+      const targetClientId = FacturationController.resolveClientId(req, client_id);
+      
+      // Verify client exists
+      const clientCheck = await pool.query('SELECT id, is_subvented, ville_type FROM utilisateurs WHERE id = $1', [targetClientId]);
+      if (clientCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Client introuvable.' });
+      }
+
+      // 1. If only calculating preview (save_to_history = false), return calculation details immediately
+      if (!saveToHistory) {
+        const calc = await SeneauCalculator.calculer(targetClientId, conso, mode_paiement, {
+          includeCaution: include_caution === true,
+          calibre: calibre ? parseInt(calibre, 10) : undefined
+        });
+        return res.status(200).json({
+          details: {
+            consommation: Number(calc.consommation),
+            montant_ht: Number(calc.montant_ht),
+            tva: Number(calc.tva),
+            redevance: Number(calc.redevance),
+            droit_de_timbre: Number(calc.droit_de_timbre),
+            montant_ttc: Number(calc.montant_ttc),
+            montant_social: Number(calc.montant_social),
+            montant_pleine: Number(calc.montant_pleine),
+            montant_dissuasive: Number(calc.montant_dissuasive),
+          }
+        });
+      }
+
+      // 2. Otherwise, check idempotency and save to database
+      const idempotencyKey = FacturationController.getIdempotencyKey(req);
+      if (!idempotencyKey) {
+        return res.status(400).json({ error: 'La clé d\'idempotence (header Idempotency-Key) est requise.' });
+      }
+
       const existingFacture = await IdempotencyManager.verifierCle(idempotencyKey);
       if (existingFacture) {
         return res.status(200).json({
@@ -143,22 +219,11 @@ export class FacturationController {
         });
       }
 
-      // 2. Resolve client ID
-      const targetClientId = FacturationController.resolveClientId(req, client_id);
-      
-      // Verify client exists
-      const clientCheck = await pool.query('SELECT id, is_subvented, ville_type FROM utilisateurs WHERE id = $1', [targetClientId]);
-      if (clientCheck.rows.length === 0) {
-        return res.status(404).json({ error: 'Client introuvable.' });
-      }
-
-      // 3. Compute costs
-      const calc = await SeneauCalculator.calculer(targetClientId, consommation, mode_paiement, {
+      const calc = await SeneauCalculator.calculer(targetClientId, conso, mode_paiement, {
         includeCaution: include_caution === true,
         calibre: calibre ? parseInt(calibre, 10) : undefined
       });
 
-      // 4. Save to DB
       const ref = `SEN-EAU-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
       const echeance = new Date();
       echeance.setDate(echeance.getDate() + 30); // 30 days echeance for water bill
@@ -168,9 +233,9 @@ export class FacturationController {
           utilisateur_id, service, reference_facture, consommation, 
           montant_ht, tva, redevance, droit_de_timbre, 
           montant_ttc, mode_paiement, statut, date_echeance, 
-          idempotency_key
+          idempotency_key, ancien_index, nouvel_index
         )
-        VALUES ($1, 'SENEAU', $2, $3, $4, $5, $6, $7, $8, $9, 'NON_PAYE', $10, $11)
+        VALUES ($1, 'SENEAU', $2, $3, $4, $5, $6, $7, $8, $9, 'NON_PAYE', $10, $11, $12, $13)
         RETURNING *
       `;
 
@@ -185,12 +250,25 @@ export class FacturationController {
         calc.montant_ttc.toString(),
         mode_paiement,
         echeance,
-        idempotencyKey
+        idempotencyKey,
+        ancien_index !== undefined ? Number(ancien_index) : 0,
+        nouvel_index !== undefined ? Number(nouvel_index) : 0
       ]);
 
       res.status(201).json({
         message: 'Facture d\'eau Sen\'Eau générée avec succès.',
         facture: result.rows[0],
+        details: {
+          consommation: Number(calc.consommation),
+          montant_ht: Number(calc.montant_ht),
+          tva: Number(calc.tva),
+          redevance: Number(calc.redevance),
+          droit_de_timbre: Number(calc.droit_de_timbre),
+          montant_ttc: Number(calc.montant_ttc),
+          montant_social: Number(calc.montant_social),
+          montant_pleine: Number(calc.montant_pleine),
+          montant_dissuasive: Number(calc.montant_dissuasive),
+        },
         idempotent: false
       });
 

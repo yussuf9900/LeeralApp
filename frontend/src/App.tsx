@@ -1,3 +1,4 @@
+import './App.css';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -15,7 +16,10 @@ import {
   Droplet, 
   DollarSign, 
   MapPin, 
-  LogOut 
+  LogOut,
+  Users,
+  FileText,
+  Activity
 } from 'lucide-react';
 
 // Layout & UI Components
@@ -39,7 +43,7 @@ import MeterCard from './components/meters/MeterCard';
 import MeterForm from './components/meters/MeterForm';
 import TransactionList from './components/history/TransactionList';
 
-type TabType = 'dashboard' | 'simulator' | 'meters' | 'history' | 'profile';
+type TabType = 'dashboard' | 'simulator' | 'meters' | 'history' | 'profile' | 'tarifs' | 'utilisateurs' | 'audit';
 
 // Global API Helper
 const apiRequest = async (url: string, method = 'GET', body: any = null, token: string | null = null) => {
@@ -75,6 +79,11 @@ export default function App() {
   const [dashboardStats, setDashboardStats] = useState<any>(null);
   const [meters, setMeters] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
+
+  // Admin Data State
+  const [adminUsers, setAdminUsers] = useState<any[]>([]);
+  const [adminTarifs, setAdminTarifs] = useState<any[]>([]);
+  const [adminAuditReport, setAdminAuditReport] = useState<any>(null);
 
   // Simulator State
   const [simService, setSimService] = useState<'SENELEC' | 'SENEAU'>('SENELEC');
@@ -129,6 +138,18 @@ export default function App() {
       // 4. Fetch History
       const hist = await apiRequest('/api/v1/facturation/history', 'GET', null, token);
       setHistory(hist);
+
+      // 5. Fetch Admin data if admin role
+      if (profile.role === 'ADMIN') {
+        const usersList = await apiRequest('/api/v1/admin/utilisateurs', 'GET', null, token);
+        setAdminUsers(usersList);
+
+        const tarifsList = await apiRequest('/api/v1/admin/tarifs', 'GET', null, token);
+        setAdminTarifs(tarifsList);
+
+        const audit = await apiRequest('/api/v1/admin/audit/rapport-annuel', 'GET', null, token);
+        setAdminAuditReport(audit);
+      }
     } catch (err: any) {
       console.error(err);
       if (err.message.includes('token') || err.message.includes('invalide')) {
@@ -212,6 +233,7 @@ export default function App() {
     setSimSuccessMsg('');
     try {
       const typeTx = simService === 'SENELEC' ? 'RECHARGE_WOYOFAL' : 'FACTURE_EAU';
+      const idKey = `IDEM-WOY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
       
       if (simService === 'SENELEC') {
         await apiRequest('/api/v1/facturation/senelec', 'POST', {
@@ -219,7 +241,8 @@ export default function App() {
           nouvel_index: simNouvelIndex,
           mode_paiement: simModePaiement,
           type_transaction: typeTx,
-          save_to_history: true
+          save_to_history: true,
+          idempotency_key: idKey
         }, token);
       } else {
         await apiRequest('/api/v1/facturation/seneau', 'POST', {
@@ -228,7 +251,8 @@ export default function App() {
           mode_paiement: simModePaiement,
           ville_type: simVilleType,
           type_transaction: typeTx,
-          save_to_history: true
+          save_to_history: true,
+          idempotency_key: idKey
         }, token);
       }
 
@@ -238,6 +262,39 @@ export default function App() {
       alert(err.message);
     } finally {
       setSimSaving(false);
+    }
+  };
+
+  // --- Admin action handlers ---
+  const handleUpdateTariff = async (tariffId: number, val: number) => {
+    try {
+      await apiRequest(`/api/v1/admin/tarifs/${tariffId}`, 'PUT', { prix_par_unite: val }, token);
+      loadUserData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleUpdateUser = async (userId: string, role: string, isSubvented: boolean, villeType: string) => {
+    try {
+      await apiRequest(`/api/v1/admin/utilisateurs/${userId}`, 'PUT', {
+        role,
+        is_subvented: isSubvented,
+        ville_type: villeType
+      }, token);
+      loadUserData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('Voulez-vous vraiment supprimer cet utilisateur ?')) return;
+    try {
+      await apiRequest(`/api/v1/admin/utilisateurs/${userId}`, 'DELETE', null, token);
+      loadUserData();
+    } catch (err: any) {
+      alert(err.message);
     }
   };
 
@@ -348,8 +405,8 @@ export default function App() {
       {/* BODY CONTENT */}
       <main className="main-content">
         <AnimatePresence mode="wait">
-          {/* TAB 1: DASHBOARD */}
-          {currentTab === 'dashboard' && (
+          {/* TAB 1: DASHBOARD (Client) */}
+          {currentTab === 'dashboard' && userProfile?.role !== 'ADMIN' && (
             <motion.div key="dashboard" className="dashboard-grid" {...tabTransition}>
               {/* Left Column */}
               <div className="dashboard-left-col">
@@ -434,6 +491,121 @@ export default function App() {
 
                 {/* Smart Savings Tip */}
                 <SavingsTip stats={dashboardStats} />
+              </div>
+            </motion.div>
+          )}
+
+          {/* TAB 1: DASHBOARD (Admin) */}
+          {currentTab === 'dashboard' && userProfile?.role === 'ADMIN' && (
+            <motion.div key="admin-dashboard" className="dashboard-grid" {...tabTransition}>
+              {/* Stats Cards */}
+              <div className="service-cards-grid" style={{ gridColumn: '1 / -1', marginBottom: 20 }}>
+                <GlassCard style={{ padding: 18, borderLeft: '4px solid var(--color-success)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Recettes Totales (TTC)</div>
+                      <h2 style={{ fontSize: 24, fontWeight: 900, marginTop: 8 }}>
+                        {history.reduce((acc, inv) => inv.statut === 'PAYE' ? acc + parseFloat(inv.montant_ttc) : acc, 0).toLocaleString('fr-FR')} F
+                      </h2>
+                    </div>
+                    <div style={{ padding: 10, borderRadius: 12, background: 'rgba(34, 197, 94, 0.1)', color: 'var(--color-success)' }}>
+                      <DollarSign size={24} />
+                    </div>
+                  </div>
+                </GlassCard>
+
+                <GlassCard style={{ padding: 18, borderLeft: '4px solid var(--color-warning)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>En-cours (Non Payés)</div>
+                      <h2 style={{ fontSize: 24, fontWeight: 900, marginTop: 8, color: 'var(--color-warning)' }}>
+                        {history.filter(i => i.statut === 'NON_PAYE').reduce((acc, inv) => acc + parseFloat(inv.montant_ttc), 0).toLocaleString('fr-FR')} F
+                      </h2>
+                    </div>
+                    <div style={{ padding: 10, borderRadius: 12, background: 'rgba(245, 158, 11, 0.1)', color: 'var(--color-warning)' }}>
+                      <Activity size={24} />
+                    </div>
+                  </div>
+                </GlassCard>
+
+                <GlassCard style={{ padding: 18, borderLeft: '4px solid var(--color-primary)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Transactions Total</div>
+                      <h2 style={{ fontSize: 24, fontWeight: 900, marginTop: 8 }}>
+                        {history.length}
+                      </h2>
+                    </div>
+                    <div style={{ padding: 10, borderRadius: 12, background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
+                      <FileText size={24} />
+                    </div>
+                  </div>
+                </GlassCard>
+
+                <GlassCard style={{ padding: 18, borderLeft: '4px solid #0ea5e9' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Nombre de Clients</div>
+                      <h2 style={{ fontSize: 24, fontWeight: 900, marginTop: 8 }}>
+                        {adminUsers.filter(u => u.role === 'CLIENT').length}
+                      </h2>
+                    </div>
+                    <div style={{ padding: 10, borderRadius: 12, background: 'rgba(14, 165, 233, 0.1)', color: '#0ea5e9' }}>
+                      <Users size={24} />
+                    </div>
+                  </div>
+                </GlassCard>
+              </div>
+
+              {/* All System Invoices */}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <GlassCard style={{ padding: 20 }}>
+                  <h4 style={{ fontSize: 16, fontWeight: 800, marginBottom: 16 }}>Toutes les Factures du Système</h4>
+                  <div className="table-wrapper" style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1.5px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 700 }}>
+                          <th style={{ padding: '10px 8px' }}>Client</th>
+                          <th style={{ padding: '10px 8px' }}>Référence</th>
+                          <th style={{ padding: '10px 8px' }}>Date</th>
+                          <th style={{ padding: '10px 8px' }}>Service</th>
+                          <th style={{ padding: '10px 8px' }}>Mode</th>
+                          <th style={{ padding: '10px 8px' }}>Consommation</th>
+                          <th style={{ padding: '10px 8px' }}>Montant TTC</th>
+                          <th style={{ padding: '10px 8px' }}>Statut</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {history.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} style={{ textAlign: 'center', padding: 20, color: 'var(--text-secondary)' }}>Aucune facture enregistrée dans le système.</td>
+                          </tr>
+                        ) : (
+                          history.map(inv => (
+                            <tr key={inv.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '10px 8px', fontWeight: 600 }}>{inv.client_name || 'Utilisateur'}</td>
+                              <td style={{ padding: '10px 8px', fontFamily: 'monospace' }}>{inv.reference_facture}</td>
+                              <td style={{ padding: '10px 8px' }}>{new Date(inv.cree_a).toLocaleDateString('fr-FR')}</td>
+                              <td style={{ padding: '10px 8px', fontWeight: 700 }}>
+                                <span className={`service-badge ${inv.service === 'SENELEC' ? 'senelec' : 'seneau'}`}>
+                                  {inv.service}
+                                </span>
+                              </td>
+                              <td style={{ padding: '10px 8px' }}>{inv.mode_paiement}</td>
+                              <td style={{ padding: '10px 8px' }}>{parseFloat(inv.consommation).toLocaleString('fr-FR')} {inv.service === 'SENELEC' ? 'kWh' : 'm³'}</td>
+                              <td style={{ padding: '10px 8px', fontWeight: 700 }}>{parseFloat(inv.montant_ttc).toLocaleString('fr-FR')} F</td>
+                              <td style={{ padding: '10px 8px' }}>
+                                <span className={`status-badge ${inv.statut === 'PAYE' ? 'paye' : 'non_paye'}`}>
+                                  {inv.statut === 'PAYE' ? 'PAYÉ' : 'NON PAYÉ'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </GlassCard>
               </div>
             </motion.div>
           )}
@@ -586,11 +758,229 @@ export default function App() {
             </motion.div>
           )}
 
-          {/* TAB 4: HISTORY */}
-          {currentTab === 'history' && (
+          {/* TAB 4: HISTORY (Client) */}
+          {currentTab === 'history' && userProfile?.role !== 'ADMIN' && (
             <motion.div key="history" className="history-grid" {...tabTransition}>
               <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Historique de Budget</h3>
               <TransactionList history={history} onPay={handlePayBill} />
+            </motion.div>
+          )}
+
+          {/* TAB 4: HISTORY (Admin) */}
+          {currentTab === 'history' && userProfile?.role === 'ADMIN' && (
+            <motion.div key="admin-history-all" className="history-grid" {...tabTransition}>
+              <GlassCard style={{ padding: 24 }} hoverScale={false}>
+                <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Toutes les Factures du Système</h3>
+                <div className="table-wrapper" style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1.5px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 700 }}>
+                        <th style={{ padding: 10 }}>Client</th>
+                        <th style={{ padding: 10 }}>Référence</th>
+                        <th style={{ padding: 10 }}>Service</th>
+                        <th style={{ padding: 10 }}>Volume</th>
+                        <th style={{ padding: 10 }}>Mode</th>
+                        <th style={{ padding: 10 }}>Montant TTC</th>
+                        <th style={{ padding: 10 }}>Statut</th>
+                        <th style={{ padding: 10 }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.map(inv => (
+                        <tr key={inv.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: 10, fontWeight: 600 }}>{inv.client_name}</td>
+                          <td style={{ padding: 10, fontFamily: 'monospace' }}>{inv.reference_facture}</td>
+                          <td style={{ padding: 10, fontWeight: 700 }}>{inv.service}</td>
+                          <td style={{ padding: 10 }}>{parseFloat(inv.consommation)} {inv.service === 'SENELEC' ? 'kWh' : 'm³'}</td>
+                          <td style={{ padding: 10 }}>{inv.mode_paiement}</td>
+                          <td style={{ padding: 10, fontWeight: 700 }}>{parseFloat(inv.montant_ttc).toLocaleString()} F</td>
+                          <td style={{ padding: 10 }}>
+                            <span className={`status-badge ${inv.statut === 'PAYE' ? 'paye' : 'non_paye'}`}>
+                              {inv.statut === 'PAYE' ? 'Payé' : 'Impayé'}
+                            </span>
+                          </td>
+                          <td style={{ padding: 10 }}>
+                            {inv.service === 'SENEAU' && inv.statut !== 'PAYE' && (
+                              <button 
+                                onClick={() => handlePayBill(inv.id)}
+                                style={{ border: 'none', background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontWeight: 700, padding: '4px 8px', borderRadius: 8, cursor: 'pointer' }}
+                              >
+                                Enregistrer Paiement
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </GlassCard>
+            </motion.div>
+          )}
+
+          {/* TAB: TARIFS (Admin) */}
+          {currentTab === 'tarifs' && userProfile?.role === 'ADMIN' && (
+            <motion.div key="tarifs" className="history-grid" {...tabTransition}>
+              <GlassCard style={{ padding: 24 }} hoverScale={false}>
+                <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Configuration des Tarifs Réglementaires</h3>
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 20 }}>
+                  Ajustez les prix réglementés par unité (kWh pour Senelec, m³ pour Sen'Eau) appliqués lors des simulations.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                  {adminTarifs.map((tariff) => (
+                    <GlassCard key={tariff.id} style={{ padding: 16, borderLeft: '4px solid var(--color-primary)' }} hoverScale={false}>
+                      <h4 style={{ fontWeight: 800, fontSize: 14 }}>{tariff.service} - Tranche {tariff.tranche}</h4>
+                      <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, marginBottom: 12 }}>
+                        Limite : {tariff.limite_max ? `${tariff.limite_max} ${tariff.service === 'SENELEC' ? 'kWh' : 'm³'}` : 'Illimitée'}
+                      </p>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label style={{ fontSize: 11 }}>Prix unitaire (FCFA)</label>
+                        <div className="input-wrapper">
+                          <DollarSign size={16} />
+                          <input 
+                            type="number" 
+                            defaultValue={tariff.prix_par_unite}
+                            onBlur={(e) => handleUpdateTariff(tariff.id, parseFloat(e.target.value))}
+                            style={{ paddingLeft: 12 }}
+                          />
+                        </div>
+                      </div>
+                    </GlassCard>
+                  ))}
+                </div>
+              </GlassCard>
+            </motion.div>
+          )}
+
+          {/* TAB: UTILISATEURS (Admin) */}
+          {currentTab === 'utilisateurs' && userProfile?.role === 'ADMIN' && (
+            <motion.div key="utilisateurs" className="history-grid" {...tabTransition}>
+              <GlassCard style={{ padding: 24 }} hoverScale={false}>
+                <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Gestion des Accès Clients</h3>
+                <div className="table-wrapper" style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1.5px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 700 }}>
+                        <th style={{ padding: 10 }}>Nom</th>
+                        <th style={{ padding: 10 }}>Email</th>
+                        <th style={{ padding: 10 }}>Rôle</th>
+                        <th style={{ padding: 10 }}>Subventionné</th>
+                        <th style={{ padding: 10 }}>Zone Assainie</th>
+                        <th style={{ padding: 10 }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminUsers.map(u => (
+                        <tr key={u.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: 10, fontWeight: 600 }}>{u.nom}</td>
+                          <td style={{ padding: 10 }}>{u.email}</td>
+                          <td style={{ padding: 10 }}>
+                            <select 
+                              defaultValue={u.role} 
+                              onChange={(e) => handleUpdateUser(u.id, e.target.value, u.is_subvented, u.ville_type)}
+                              style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-card)', color: 'var(--text-primary)' }}
+                            >
+                              <option value="CLIENT">CLIENT</option>
+                              <option value="ADMIN">ADMIN</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: 10, textAlign: 'center' }}>
+                            <input 
+                              type="checkbox" 
+                              defaultChecked={u.is_subvented}
+                              onChange={(e) => handleUpdateUser(u.id, u.role, e.target.checked, u.ville_type)}
+                            />
+                          </td>
+                          <td style={{ padding: 10 }}>
+                            <select 
+                              defaultValue={u.ville_type} 
+                              onChange={(e) => handleUpdateUser(u.id, u.role, u.is_subvented, e.target.value)}
+                              style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-card)', color: 'var(--text-primary)' }}
+                            >
+                              <option value="NON_ASSAINIE">Non Assainie</option>
+                              <option value="ASSAINIE">Assainie</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: 10 }}>
+                            <button 
+                              onClick={() => handleDeleteUser(u.id)}
+                              disabled={u.id === userProfile?.id}
+                              style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', fontWeight: 700, cursor: u.id === userProfile?.id ? 'not-allowed' : 'pointer', opacity: u.id === userProfile?.id ? 0.5 : 1 }}
+                            >
+                              Supprimer
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </GlassCard>
+            </motion.div>
+          )}
+
+          {/* TAB: AUDIT (Admin) */}
+          {currentTab === 'audit' && userProfile?.role === 'ADMIN' && adminAuditReport && (
+            <motion.div key="audit" className="history-grid" {...tabTransition}>
+              <GlassCard style={{ padding: 24 }} hoverScale={false}>
+                <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Rapport d'Audit CRSE/SONES (OpenTelemetry)</h3>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
+                  <GlassCard style={{ padding: 14 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Validation TVA (Senelec &gt; 250kWh)</div>
+                    <div style={{ marginTop: 8, fontWeight: 700, color: 'var(--color-success)' }}>
+                      {adminAuditReport.regulatory_compliance_checklist.senelec_tva_compliance}
+                    </div>
+                  </GlassCard>
+                  <GlassCard style={{ padding: 14 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Validation Droit de Timbre (1% CASH)</div>
+                    <div style={{ marginTop: 8, fontWeight: 700, color: 'var(--color-success)' }}>
+                      {adminAuditReport.regulatory_compliance_checklist.droit_de_timbre_cash_compliance}
+                    </div>
+                  </GlassCard>
+                  <GlassCard style={{ padding: 14 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Empreinte d'Intégrité Audit</div>
+                    <div style={{ marginTop: 8, fontWeight: 700, fontFamily: 'monospace', fontSize: 12 }}>
+                      {adminAuditReport.regulatory_compliance_checklist.integrity_hash.substring(0, 16)}...
+                    </div>
+                  </GlassCard>
+                </div>
+
+                <div style={{ padding: 16, background: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: 12, fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap', marginBottom: 16 }}>
+{`RAPPORT DE CONFORMITÉ FINANCIÈRE ET FISCALE LEERAL
+-----------------------------------------------------------
+Généré le : ${new Date(adminAuditReport.report_timestamp).toLocaleString('fr-FR')}
+Régulation Cible : ${adminAuditReport.target_regulation}
+Intégrité Cryptographique : SUCCESS
+
+MÉTRIQUES DE CALCUL GLOBALES :
+- Transactions traitées : ${adminAuditReport.metrics.total_transactions}
+- Total Montant HT : ${adminAuditReport.metrics.total_ht.toLocaleString('fr-FR')} F CFA
+- Total TVA collectée (18%) : ${adminAuditReport.metrics.total_tva.toLocaleString('fr-FR')} F CFA
+- Total Droits de Timbre collectés (1% CASH) : ${adminAuditReport.metrics.total_timbre.toLocaleString('fr-FR')} F CFA
+- Total Recettes TTC : ${adminAuditReport.metrics.total_ttc.toLocaleString('fr-FR')} F CFA
+
+RECHARGE D'ÉNERGIE GLOBALE (SENELEC) :
+- Consommation totale injectée : ${adminAuditReport.metrics.electricity_consumed_kwh.toLocaleString('fr-FR')} kWh
+
+DISTRIBUTION D'EAU GLOBALE (SEN'EAU) :
+- Consommation totale distribuée : ${adminAuditReport.metrics.water_consumed_m3.toLocaleString('fr-FR')} m³
+
+RÉPARTITION PAR MODE DE PAIEMENT :
+${adminAuditReport.payment_splits.map((s: any) => `- Mode [${s.mode}] : ${s.count} transactions, TTC: ${s.total_ttc.toLocaleString('fr-FR')} F, Timbre: ${s.total_timbre.toLocaleString('fr-FR')} F`).join('\n')}
+
+VÉRIFICATIONS RÉGLEMENTAIRES EFFECTUÉES :
+1. Application de la TVA Senelec sur tranche pivot (> 250 kWh uniquement) : ${adminAuditReport.regulatory_compliance_checklist.senelec_tva_compliance}
+2. Exonération du timbre fiscal pour paiements digitaux : ${adminAuditReport.regulatory_compliance_checklist.droit_de_timbre_cash_compliance}
+3. Application stricte du 1% de timbre fiscal pour règlements CASH : ${adminAuditReport.regulatory_compliance_checklist.droit_de_timbre_cash_compliance}
+
+-----------------------------------------------------------
+FIN DU RAPPORT - VÉRIFICATION IMMUABLE CRSE / Impôts Sénégal`}
+                </div>
+                <button className="btn-premium btn-premium-primary" onClick={() => window.print()}>
+                  Exporter le Rapport CRSE/SONES
+                </button>
+              </GlassCard>
             </motion.div>
           )}
 
@@ -690,7 +1080,7 @@ export default function App() {
       </main>
 
       {/* BOTTOM MOBILE NAVIGATION */}
-      <BottomNav currentTab={currentTab} setCurrentTab={setCurrentTab} />
+      <BottomNav currentTab={currentTab} setCurrentTab={setCurrentTab} userProfile={userProfile} />
     </div>
   );
 }

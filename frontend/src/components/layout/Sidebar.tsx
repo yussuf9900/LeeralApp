@@ -5,11 +5,14 @@ import {
   Gauge, 
   History, 
   User, 
-  LogOut 
+  LogOut,
+  Settings,
+  Users,
+  ShieldCheck
 } from 'lucide-react';
 import ThemeToggle from '../ui/ThemeToggle';
 
-type TabType = 'dashboard' | 'simulator' | 'meters' | 'history' | 'profile';
+type TabType = 'dashboard' | 'simulator' | 'meters' | 'history' | 'profile' | 'tarifs' | 'utilisateurs' | 'audit';
 
 interface SidebarProps {
   currentTab: TabType;
@@ -28,7 +31,16 @@ export default function Sidebar({
   userProfile,
   onLogout
 }: SidebarProps) {
-  const menuItems = [
+  const isAdmin = userProfile?.role === 'ADMIN';
+
+  const menuItems = isAdmin ? [
+    { id: 'dashboard' as TabType, label: 'Tableau de Bord', icon: LayoutDashboard },
+    { id: 'history' as TabType, label: 'Toutes les Factures', icon: History },
+    { id: 'tarifs' as TabType, label: 'Tarifs Réglementés', icon: Settings },
+    { id: 'utilisateurs' as TabType, label: 'Gestion Utilisateurs', icon: Users },
+    { id: 'audit' as TabType, label: 'Centre d\'Audit', icon: ShieldCheck },
+    { id: 'profile' as TabType, label: 'Mon Profil', icon: User }
+  ] : [
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'simulator' as TabType, label: 'Simulateur', icon: Calculator },
     { id: 'meters' as TabType, label: 'Mes Compteurs', icon: Gauge },

@@ -42,7 +42,7 @@ export class AuthController {
       const insertQuery = `
         INSERT INTO utilisateurs (nom, email, mot_de_passe, role, is_subvented, ville_type)
         VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, nom, email, role, is_subvented, ville_type, cree_a
+        RETURNING id, nom, email, role, is_subvented, ville_type, budget_mensuel, cree_a
       `;
       const result = await pool.query(insertQuery, [nom, email, passwordHash, userRole, subvented, vType]);
       const newUser = result.rows[0];
@@ -60,6 +60,7 @@ export class AuthController {
           role: newUser.role,
           is_subvented: newUser.is_subvented,
           ville_type: newUser.ville_type,
+          budget_mensuel: newUser.budget_mensuel,
         }
       });
     } catch (err: any) {
@@ -112,6 +113,7 @@ export class AuthController {
           role: user.role,
           is_subvented: user.is_subvented,
           ville_type: user.ville_type,
+          budget_mensuel: user.budget_mensuel,
         }
       });
     } catch (err) {
@@ -131,7 +133,7 @@ export class AuthController {
 
     try {
       const result = await pool.query(
-        'SELECT id, nom, email, role, is_subvented, ville_type, cree_a FROM utilisateurs WHERE id = $1',
+        'SELECT id, nom, email, role, is_subvented, ville_type, budget_mensuel, cree_a FROM utilisateurs WHERE id = $1',
         [userPayload.id]
       );
       if (result.rows.length === 0) {

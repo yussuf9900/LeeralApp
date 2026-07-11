@@ -9,11 +9,17 @@ export interface SenelecCalculationResult {
   redevance: Decimal;
   droit_de_timbre: Decimal;
   montant_ttc: Decimal;
+  montant_t1: Decimal;
+  montant_t2: Decimal;
+  montant_t3: Decimal;
+  taxe_communale: Decimal;
 }
 
 export class SenelecWoyofalCalculator {
   private static REDEVANCE_MONOPHASE = new Decimal(429);
-  private static TAUX_TVA = new Decimal(0.18);
+  private static TAXE_COMMUNALE_RATE = new Decimal(0.025);
+  private static TAXE_TIMBRE_CASH = new Decimal(0.01);
+  private static TAXE_TVA_RATE = new Decimal(0.18);
   private static SEUIL_PIVOT_TVA = new Decimal(250);
   private static SEUIL_TRANCHE_1 = new Decimal(150);
 
@@ -63,20 +69,28 @@ export class SenelecWoyofalCalculator {
     const priceT1 = MathUtils.safeMultiply(t1Db.prix_par_unite, new Decimal(0.9));
     const priceT2 = new Decimal(t2Db.prix_par_unite);
 
-    let montantHt = new Decimal(0);
     let htSubjectToTva = new Decimal(0);
 
     // 2. Calculate HT split by tranches
-    if (conso.lte(this.SEUIL_TRANCHE_1)) {
-      // All in Tranche 1
-      montantHt = MathUtils.safeMultiply(conso, priceT1);
+    let montantT1 = new Decimal(0);
+    let montantT2 = new Decimal(0);
+    let montantT3 = new Decimal(0);
+
+    if (conso.lte(150)) {
+      montantT1 = MathUtils.safeMultiply(conso, priceT1);
+    } else if (conso.lte(250)) {
+      montantT1 = MathUtils.safeMultiply(new Decimal(150), priceT1);
+      montantT2 = MathUtils.safeMultiply(MathUtils.safeSubtract(conso, new Decimal(150)), priceT2);
     } else {
-      // Part in Tranche 1 (first 150 kWh) and the rest in Tranche 2
-      const htT1 = MathUtils.safeMultiply(this.SEUIL_TRANCHE_1, priceT1);
-      const remainingConso = MathUtils.safeSubtract(conso, this.SEUIL_TRANCHE_1);
-      const htT2 = MathUtils.safeMultiply(remainingConso, priceT2);
-      montantHt = MathUtils.safeAdd(htT1, htT2);
+      montantT1 = MathUtils.safeMultiply(new Decimal(150), priceT1);
+      montantT2 = MathUtils.safeMultiply(new Decimal(100), priceT2);
+      montantT3 = MathUtils.safeMultiply(MathUtils.safeSubtract(conso, new Decimal(250)), priceT2);
     }
+
+    const montantHt = MathUtils.safeAdd(MathUtils.safeAdd(montantT1, montantT2), montantT3);
+
+    // Municipal Tax (2.5% of HT)
+    const taxeCommunale = MathUtils.safeMultiply(montantHt, this.TAXE_COMMUNALE_RATE);
 
     // 3. Calculate TVA: 18% only on consumption exceeding 250 kWh
     if (conso.gt(this.SEUIL_PIVOT_TVA)) {
@@ -84,7 +98,7 @@ export class SenelecWoyofalCalculator {
       // The excess consumption is priced at Tranche 2 rate
       htSubjectToTva = MathUtils.safeMultiply(excessConso, priceT2);
     }
-    const tva = MathUtils.safeMultiply(htSubjectToTva, this.TAUX_TVA);
+    const tva = MathUtils.safeMultiply(htSubjectToTva, this.TAXE_TVA_RATE);
 
     // 4. Redevance (Frais fixes): only on the first transaction of the month
     const isFirst = await this.estPremiereRechargeDuMois(utilisateurId);
@@ -92,9 +106,15 @@ export class SenelecWoyofalCalculator {
 
     // 5. Timbre fiscal (1%): only if payment is CASH
     let droitDeTimbre = new Decimal(0);
-    const rawTotal = MathUtils.safeAdd(MathUtils.safeAdd(montantHt, tva), redevance);
+    const rawTotal = MathUtils.safeAdd(
+      MathUtils.safeAdd(
+        MathUtils.safeAdd(montantHt, tva), 
+        redevance
+      ), 
+      taxeCommunale
+    );
     if (modePaiement === 'CASH') {
-      droitDeTimbre = MathUtils.safeMultiply(rawTotal, new Decimal(0.01));
+      droitDeTimbre = MathUtils.safeMultiply(rawTotal, this.TAXE_TIMBRE_CASH);
     }
 
     // 6. Montant TTC
@@ -107,6 +127,10 @@ export class SenelecWoyofalCalculator {
       redevance: MathUtils.roundFinancial(redevance),
       droit_de_timbre: MathUtils.roundFinancial(droitDeTimbre),
       montant_ttc: MathUtils.roundFinancial(montantTtc),
+      montant_t1: MathUtils.roundFinancial(montantT1),
+      montant_t2: MathUtils.roundFinancial(montantT2),
+      montant_t3: MathUtils.roundFinancial(montantT3),
+      taxe_communale: MathUtils.roundFinancial(taxeCommunale),
     };
   }
 }
