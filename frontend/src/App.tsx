@@ -1112,7 +1112,7 @@ FIN DU RAPPORT - VÉRIFICATION IMMUABLE CRSE / Impôts Sénégal`}
           )}
 
           {/* TAB 5: PROFILE */}
-          {currentTab === 'profile' && (
+          {currentTab === 'profile' && userProfile?.role !== 'ADMIN' && (
             <motion.div key="profile" className="profile-grid" {...tabTransition}>
               <GlassCard style={{ padding: 24 }} hoverScale={false}>
                 <div style={{ display: 'flex', gap: 14, alignItems: 'center', borderBottom: '1.5px solid var(--border-color)', paddingBottom: 16, marginBottom: 20 }}>

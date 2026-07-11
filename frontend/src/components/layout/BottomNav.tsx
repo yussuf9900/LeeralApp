@@ -6,7 +6,8 @@ import {
   History, 
   User,
   Settings,
-  Users
+  Users,
+  ShieldCheck
 } from 'lucide-react';
 
 type TabType = 'dashboard' | 'simulator' | 'meters' | 'history' | 'profile' | 'tarifs' | 'utilisateurs' | 'audit';
@@ -25,7 +26,7 @@ export default function BottomNav({ currentTab, setCurrentTab, userProfile }: Bo
     { id: 'history' as TabType, label: 'Factures', icon: History },
     { id: 'tarifs' as TabType, label: 'Tarifs', icon: Settings },
     { id: 'utilisateurs' as TabType, label: 'Users', icon: Users },
-    { id: 'profile' as TabType, label: 'Profil', icon: User }
+    { id: 'audit' as TabType, label: 'Audit', icon: ShieldCheck }
   ] : [
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'simulator' as TabType, label: 'Simuler', icon: Calculator },

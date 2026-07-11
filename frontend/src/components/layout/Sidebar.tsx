@@ -38,8 +38,7 @@ export default function Sidebar({
     { id: 'history' as TabType, label: 'Toutes les Factures', icon: History },
     { id: 'tarifs' as TabType, label: 'Tarifs Réglementés', icon: Settings },
     { id: 'utilisateurs' as TabType, label: 'Gestion Utilisateurs', icon: Users },
-    { id: 'audit' as TabType, label: 'Centre d\'Audit', icon: ShieldCheck },
-    { id: 'profile' as TabType, label: 'Mon Profil', icon: User }
+    { id: 'audit' as TabType, label: 'Centre d\'Audit', icon: ShieldCheck }
   ] : [
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'simulator' as TabType, label: 'Simulateur', icon: Calculator },
