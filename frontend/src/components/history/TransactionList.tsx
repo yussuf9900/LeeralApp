@@ -75,8 +75,8 @@ export default function TransactionList({
                     <span>Consommé: {parseFloat(item.consommation)} {isSenelec ? 'kWh' : 'm³'}</span>
                   </div>
 
-                  {/* Payment button if unpaid water bill */}
-                  {!isSenelec && !isPaye && (
+                  {/* Payment button if unpaid bill */}
+                  {!isPaye && (
                     <button 
                       onClick={() => onPay(item.id)}
                       className="btn-premium btn-premium-primary"

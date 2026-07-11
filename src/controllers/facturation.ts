@@ -29,10 +29,10 @@ export class FacturationController {
    * Handle Senelec Woyofal bill creation
    */
   static async handleSenelecCalculation(req: Request, res: Response): Promise<any> {
-    const { consommation, mode_paiement, client_id, save_to_history, ancien_index, nouvel_index } = req.body;
+    const { consommation, mode_paiement, client_id, save_to_history, ancien_index, nouvel_index, type_transaction } = req.body;
     const saveToHistory = save_to_history !== false;
 
-    // Resolve consumption if indexes are sent
+    // Resolve consumption if index are sent
     let conso = consommation;
     if (conso === undefined && ancien_index !== undefined && nouvel_index !== undefined) {
       conso = Number(nouvel_index) - Number(ancien_index);
@@ -76,9 +76,9 @@ export class FacturationController {
       }
 
       // 2. Otherwise, check idempotency and save to database
-      const idempotencyKey = FacturationController.getIdempotencyKey(req);
+      let idempotencyKey = FacturationController.getIdempotencyKey(req);
       if (!idempotencyKey) {
-        return res.status(400).json({ error: 'La clé d\'idempotence (header Idempotency-Key) est requise pour cette transaction.' });
+        idempotencyKey = `IDEM-FALLBACK-${targetClientId}-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
       }
 
       const existingFacture = await IdempotencyManager.verifierCle(idempotencyKey);
@@ -94,16 +94,17 @@ export class FacturationController {
 
       const ref = `SEN-WOY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
       const echeance = new Date();
-      echeance.setDate(echeance.getDate() + 15); // 15 days deadline for payment or immediately paid
+      echeance.setDate(echeance.getDate() + 15); // 15 days deadline for payment
 
       const insertQuery = `
         INSERT INTO factures (
           utilisateur_id, service, reference_facture, consommation, 
           montant_ht, tva, redevance, droit_de_timbre, 
           montant_ttc, mode_paiement, statut, date_echeance, 
-          idempotency_key, paye_a, ancien_index, nouvel_index, taxe_communale
+          idempotency_key, paye_a, ancien_index, nouvel_index, taxe_communale,
+          type_transaction
         )
-        VALUES ($1, 'SENELEC', $2, $3, $4, $5, $6, $7, $8, $9, 'PAYE', $10, $11, CURRENT_TIMESTAMP, $12, $13, $14)
+        VALUES ($1, 'SENELEC', $2, $3, $4, $5, $6, $7, $8, $9, 'NON_PAYE', $10, $11, NULL, $12, $13, $14, $15)
         RETURNING *
       `;
 
@@ -121,11 +122,12 @@ export class FacturationController {
         idempotencyKey,
         ancien_index !== undefined ? Number(ancien_index) : 0,
         nouvel_index !== undefined ? Number(nouvel_index) : 0,
-        calc.taxe_communale.toString()
+        calc.taxe_communale.toString(),
+        type_transaction || 'RECHARGE_WOYOFAL'
       ]);
 
       res.status(201).json({
-        message: 'Recharge Woyofal générée avec succès.',
+        message: 'Recharge Woyofal générée avec succès (impayée).',
         facture: result.rows[0],
         details: {
           consommation: Number(calc.consommation),
@@ -152,7 +154,7 @@ export class FacturationController {
    * Handle Seneau Water bill creation
    */
   static async handleSeneauCalculation(req: Request, res: Response): Promise<any> {
-    const { consommation, mode_paiement, client_id, include_caution, calibre, save_to_history, ancien_index, nouvel_index } = req.body;
+    const { consommation, mode_paiement, client_id, include_caution, calibre, save_to_history, ancien_index, nouvel_index, type_transaction } = req.body;
     const saveToHistory = save_to_history !== false;
 
     // Resolve consumption if indexes are sent
@@ -205,9 +207,9 @@ export class FacturationController {
       }
 
       // 2. Otherwise, check idempotency and save to database
-      const idempotencyKey = FacturationController.getIdempotencyKey(req);
+      let idempotencyKey = FacturationController.getIdempotencyKey(req);
       if (!idempotencyKey) {
-        return res.status(400).json({ error: 'La clé d\'idempotence (header Idempotency-Key) est requise.' });
+        idempotencyKey = `IDEM-FALLBACK-${targetClientId}-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
       }
 
       const existingFacture = await IdempotencyManager.verifierCle(idempotencyKey);
@@ -233,9 +235,9 @@ export class FacturationController {
           utilisateur_id, service, reference_facture, consommation, 
           montant_ht, tva, redevance, droit_de_timbre, 
           montant_ttc, mode_paiement, statut, date_echeance, 
-          idempotency_key, ancien_index, nouvel_index
+          idempotency_key, ancien_index, nouvel_index, type_transaction
         )
-        VALUES ($1, 'SENEAU', $2, $3, $4, $5, $6, $7, $8, $9, 'NON_PAYE', $10, $11, $12, $13)
+        VALUES ($1, 'SENEAU', $2, $3, $4, $5, $6, $7, $8, $9, 'NON_PAYE', $10, $11, $12, $13, $14)
         RETURNING *
       `;
 
@@ -252,7 +254,8 @@ export class FacturationController {
         echeance,
         idempotencyKey,
         ancien_index !== undefined ? Number(ancien_index) : 0,
-        nouvel_index !== undefined ? Number(nouvel_index) : 0
+        nouvel_index !== undefined ? Number(nouvel_index) : 0,
+        type_transaction || 'FACTURE_EAU'
       ]);
 
       res.status(201).json({

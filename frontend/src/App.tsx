@@ -611,7 +611,7 @@ export default function App() {
           )}
 
           {/* TAB 2: SIMULATOR */}
-          {currentTab === 'simulator' && (
+          {currentTab === 'simulator' && userProfile?.role !== 'ADMIN' && (
             <motion.div key="simulator" className="simulator-grid" {...tabTransition}>
               {/* Left Column */}
               <div className="simulator-left-col">
@@ -725,7 +725,7 @@ export default function App() {
           )}
 
           {/* TAB 3: METERS */}
-          {currentTab === 'meters' && (
+          {currentTab === 'meters' && userProfile?.role !== 'ADMIN' && (
             <motion.div key="meters" className="meters-grid" {...tabTransition}>
               {/* Left Form Column */}
               <div className="meters-left-col">
