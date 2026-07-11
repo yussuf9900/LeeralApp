@@ -12,6 +12,34 @@ export class DashboardController {
     }
 
     try {
+      if (userPayload.role === 'ADMIN') {
+        const usersCountRes = await pool.query("SELECT COUNT(*) as count FROM utilisateurs WHERE role = 'CLIENT'");
+        const total_inscriptions = parseInt(usersCountRes.rows[0].count, 10);
+
+        const simulationsRes = await pool.query(`
+          SELECT 
+            COUNT(CASE WHEN service = 'SENELEC' AND type_transaction = 'SIMULATION' THEN 1 END) as sim_senelec,
+            COUNT(CASE WHEN service = 'SENEAU' AND type_transaction = 'SIMULATION' THEN 1 END) as sim_seneau,
+            COUNT(CASE WHEN service = 'SENELEC' AND type_transaction != 'SIMULATION' THEN 1 END) as bill_senelec,
+            COUNT(CASE WHEN service = 'SENEAU' AND type_transaction != 'SIMULATION' THEN 1 END) as bill_seneau,
+            COALESCE(SUM(CASE WHEN statut = 'PAYE' THEN montant_ttc ELSE 0 END), 0) as total_revenus,
+            COALESCE(SUM(CASE WHEN statut = 'NON_PAYE' THEN montant_ttc ELSE 0 END), 0) as total_encours
+          FROM factures
+        `);
+        const stats = simulationsRes.rows[0];
+
+        return res.status(200).json({
+          role: 'ADMIN',
+          total_inscriptions,
+          simulations_senelec: parseInt(stats.sim_senelec, 10),
+          simulations_seneau: parseInt(stats.sim_seneau, 10),
+          factures_senelec: parseInt(stats.bill_senelec, 10),
+          factures_seneau: parseInt(stats.bill_seneau, 10),
+          total_revenus: parseFloat(stats.total_revenus),
+          total_encours: parseFloat(stats.total_encours)
+        });
+      }
+
       // 1. Fetch user's budget limit
       const userRes = await pool.query(
         'SELECT budget_mensuel FROM utilisateurs WHERE id = $1',

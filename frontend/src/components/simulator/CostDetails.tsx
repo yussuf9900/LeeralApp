@@ -7,6 +7,7 @@ interface CostDetailsProps {
   onSave: () => void;
   saving: boolean;
   successMsg: string;
+  budgetOverrunWarning?: string;
 }
 
 export default function CostDetails({
@@ -14,7 +15,8 @@ export default function CostDetails({
   service,
   onSave,
   saving,
-  successMsg
+  successMsg,
+  budgetOverrunWarning
 }: CostDetailsProps) {
   if (!result) return null;
 
@@ -165,6 +167,26 @@ export default function CostDetails({
           </span>
         </div>
       </div>
+
+      {budgetOverrunWarning && (
+        <motion.div 
+          style={{ 
+            background: 'rgba(239, 68, 68, 0.1)', 
+            color: 'var(--color-danger)', 
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            padding: 12, 
+            borderRadius: 14, 
+            textAlign: 'center', 
+            fontSize: 12, 
+            fontWeight: 700, 
+            marginTop: 16 
+          }}
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+        >
+          ⚠️ {budgetOverrunWarning}
+        </motion.div>
+      )}
 
       {successMsg ? (
         <motion.div 

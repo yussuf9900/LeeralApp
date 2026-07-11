@@ -8,7 +8,11 @@ import {
   XAxis, 
   YAxis, 
   Tooltip, 
-  Cell 
+  Cell,
+  LineChart,
+  Line,
+  CartesianGrid,
+  Legend
 } from 'recharts';
 import { 
   AlertTriangle, 
@@ -84,6 +88,7 @@ export default function App() {
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
   const [adminTarifs, setAdminTarifs] = useState<any[]>([]);
   const [adminAuditReport, setAdminAuditReport] = useState<any>(null);
+  const [adminConfigs, setAdminConfigs] = useState<any[]>([]);
 
   // Simulator State
   const [simService, setSimService] = useState<'SENELEC' | 'SENEAU'>('SENELEC');
@@ -149,6 +154,9 @@ export default function App() {
 
         const audit = await apiRequest('/api/v1/admin/audit/rapport-annuel', 'GET', null, token);
         setAdminAuditReport(audit);
+
+        const configsList = await apiRequest('/api/v1/admin/configurations', 'GET', null, token);
+        setAdminConfigs(configsList);
       }
     } catch (err: any) {
       console.error(err);
@@ -275,6 +283,17 @@ export default function App() {
     }
   };
 
+  const handleUpdateConfig = async (cle: string, val: number) => {
+    try {
+      await apiRequest(`/api/v1/admin/configurations/${cle}`, 'PUT', { valeur: val }, token);
+      // Reload configurations
+      const configsList = await apiRequest('/api/v1/admin/configurations', 'GET', null, token);
+      setAdminConfigs(configsList);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   const handleUpdateUser = async (userId: string, role: string, isSubvented: boolean, villeType: string) => {
     try {
       await apiRequest(`/api/v1/admin/utilisateurs/${userId}`, 'PUT', {
@@ -370,10 +389,38 @@ export default function App() {
   }
 
   // Render Charts Data (Senelec vs Seneau spendings)
-  const chartData = dashboardStats ? [
+  const chartData = dashboardStats && userProfile?.role !== 'ADMIN' ? [
     { name: 'Électricité', Montant: dashboardStats.depenses_senelec, color: '#f59e0b' },
     { name: 'Eau', Montant: dashboardStats.depenses_seneau, color: '#0ea5e9' }
   ] : [];
+
+  const adminChartData = dashboardStats && userProfile?.role === 'ADMIN' ? [
+    { name: 'Simulations Élec', Volume: dashboardStats.simulations_senelec || 0, color: '#f59e0b' },
+    { name: 'Simulations Eau', Volume: dashboardStats.simulations_seneau || 0, color: '#0ea5e9' }
+  ] : [];
+
+  const getConsumptionChartData = () => {
+    const monthlyData: { [key: string]: { month: string; Senelec: number; Seneau: number } } = {};
+    const sortedHistory = [...history].sort((a, b) => new Date(a.cree_a).getTime() - new Date(b.cree_a).getTime());
+
+    sortedHistory.forEach(item => {
+      const date = new Date(item.cree_a);
+      const monthKey = date.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+      const val = parseFloat(item.consommation || '0');
+
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = { month: monthKey, Senelec: 0, Seneau: 0 };
+      }
+
+      if (item.service === 'SENELEC') {
+        monthlyData[monthKey].Senelec += val;
+      } else if (item.service === 'SENEAU') {
+        monthlyData[monthKey].Seneau += val;
+      }
+    });
+
+    return Object.values(monthlyData);
+  };
 
   const tabTransition = {
     initial: { opacity: 0, y: 15 },
@@ -505,7 +552,7 @@ export default function App() {
                     <div>
                       <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Recettes Totales (TTC)</div>
                       <h2 style={{ fontSize: 24, fontWeight: 900, marginTop: 8 }}>
-                        {history.reduce((acc, inv) => inv.statut === 'PAYE' ? acc + parseFloat(inv.montant_ttc) : acc, 0).toLocaleString('fr-FR')} F
+                        {(dashboardStats?.total_revenus || 0).toLocaleString('fr-FR')} F
                       </h2>
                     </div>
                     <div style={{ padding: 10, borderRadius: 12, background: 'rgba(34, 197, 94, 0.1)', color: 'var(--color-success)' }}>
@@ -519,7 +566,7 @@ export default function App() {
                     <div>
                       <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>En-cours (Non Payés)</div>
                       <h2 style={{ fontSize: 24, fontWeight: 900, marginTop: 8, color: 'var(--color-warning)' }}>
-                        {history.filter(i => i.statut === 'NON_PAYE').reduce((acc, inv) => acc + parseFloat(inv.montant_ttc), 0).toLocaleString('fr-FR')} F
+                        {(dashboardStats?.total_encours || 0).toLocaleString('fr-FR')} F
                       </h2>
                     </div>
                     <div style={{ padding: 10, borderRadius: 12, background: 'rgba(245, 158, 11, 0.1)', color: 'var(--color-warning)' }}>
@@ -531,13 +578,13 @@ export default function App() {
                 <GlassCard style={{ padding: 18, borderLeft: '4px solid var(--color-primary)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Transactions Total</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Nombre d'Inscriptions</div>
                       <h2 style={{ fontSize: 24, fontWeight: 900, marginTop: 8 }}>
-                        {history.length}
+                        {dashboardStats?.total_inscriptions || 0}
                       </h2>
                     </div>
                     <div style={{ padding: 10, borderRadius: 12, background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
-                      <FileText size={24} />
+                      <Users size={24} />
                     </div>
                   </div>
                 </GlassCard>
@@ -545,14 +592,35 @@ export default function App() {
                 <GlassCard style={{ padding: 18, borderLeft: '4px solid #0ea5e9' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Nombre de Clients</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Simulations Totales</div>
                       <h2 style={{ fontSize: 24, fontWeight: 900, marginTop: 8 }}>
-                        {adminUsers.filter(u => u.role === 'CLIENT').length}
+                        {(dashboardStats?.simulations_senelec || 0) + (dashboardStats?.simulations_seneau || 0)}
                       </h2>
                     </div>
                     <div style={{ padding: 10, borderRadius: 12, background: 'rgba(14, 165, 233, 0.1)', color: '#0ea5e9' }}>
-                      <Users size={24} />
+                      <FileText size={24} />
                     </div>
+                  </div>
+                </GlassCard>
+              </div>
+
+              {/* Analytics Section with Recharts Chart */}
+              <div style={{ gridColumn: '1 / -1', marginBottom: 20 }}>
+                <GlassCard style={{ padding: 20 }}>
+                  <h4 style={{ fontSize: 14, fontWeight: 800, marginBottom: 16 }}>Volume global des simulations (Électricité vs Eau)</h4>
+                  <div style={{ width: '100%', height: 200 }}>
+                    <ResponsiveContainer>
+                      <BarChart data={adminChartData} layout="vertical">
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" width={120} style={{ fontSize: 12, fill: 'var(--text-secondary)', fontWeight: 700 }} />
+                        <Tooltip contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: 12 }} />
+                        <Bar dataKey="Volume" radius={8} barSize={24}>
+                          {adminChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
                 </GlassCard>
               </div>
@@ -718,6 +786,12 @@ export default function App() {
                     onSave={handleSaveCalculation}
                     saving={simSaving}
                     successMsg={simSuccessMsg}
+                    budgetOverrunWarning={
+                      dashboardStats && dashboardStats.budget_mensuel > 0 && 
+                      (parseFloat(dashboardStats.total_depenses || 0) + parseFloat(simResult.montant_ttc) > parseFloat(dashboardStats.budget_mensuel))
+                        ? `Attention : Cet ajout dépassera votre budget mensuel de ${(parseFloat(dashboardStats.total_depenses || 0) + parseFloat(simResult.montant_ttc) - parseFloat(dashboardStats.budget_mensuel)).toLocaleString('fr-FR')} FCFA (Nouveau total projeté : ${(parseFloat(dashboardStats.total_depenses || 0) + parseFloat(simResult.montant_ttc)).toLocaleString('fr-FR')} / ${parseFloat(dashboardStats.budget_mensuel).toLocaleString('fr-FR')} FCFA).`
+                        : undefined
+                    }
                   />
                 )}
               </div>
@@ -761,7 +835,27 @@ export default function App() {
           {/* TAB 4: HISTORY (Client) */}
           {currentTab === 'history' && userProfile?.role !== 'ADMIN' && (
             <motion.div key="history" className="history-grid" {...tabTransition}>
-              <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Historique de Budget</h3>
+              <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Historique de Consommation & Budget</h3>
+
+              {history.length > 0 && (
+                <GlassCard style={{ padding: 20, marginBottom: 20 }}>
+                  <h4 style={{ fontSize: 14, fontWeight: 800, marginBottom: 16 }}>Évolution de la consommation au fil des mois</h4>
+                  <div style={{ width: '100%', height: 200 }}>
+                    <ResponsiveContainer>
+                      <LineChart data={getConsumptionChartData()}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                        <XAxis dataKey="month" style={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                        <YAxis style={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                        <Tooltip contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: 12 }} />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Line type="monotone" dataKey="Senelec" name="Électricité (kWh)" stroke="#f59e0b" strokeWidth={3} activeDot={{ r: 8 }} />
+                        <Line type="monotone" dataKey="Seneau" name="Eau (m³)" stroke="#0ea5e9" strokeWidth={3} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </GlassCard>
+              )}
+
               <TransactionList history={history} onPay={handlePayBill} />
             </motion.div>
           )}
@@ -822,16 +916,20 @@ export default function App() {
           {currentTab === 'tarifs' && userProfile?.role === 'ADMIN' && (
             <motion.div key="tarifs" className="history-grid" {...tabTransition}>
               <GlassCard style={{ padding: 24 }} hoverScale={false}>
-                <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Configuration des Tarifs Réglementaires</h3>
+                <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Grilles Tarifaires Réglementaires</h3>
                 <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 20 }}>
-                  Ajustez les prix réglementés par unité (kWh pour Senelec, m³ pour Sen'Eau) appliqués lors des simulations.
+                  Ajustez les prix réglementés par unité (kWh ou m³). Toute modification crée une nouvelle version datée (effective_date) sans écraser l'historique.
                 </p>
+                
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                   {adminTarifs.map((tariff) => (
                     <GlassCard key={tariff.id} style={{ padding: 16, borderLeft: '4px solid var(--color-primary)' }} hoverScale={false}>
-                      <h4 style={{ fontWeight: 800, fontSize: 14 }}>{tariff.service} - Tranche {tariff.tranche}</h4>
-                      <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, marginBottom: 12 }}>
-                        Limite : {tariff.limite_max ? `${tariff.limite_max} ${tariff.service === 'SENELEC' ? 'kWh' : 'm³'}` : 'Illimitée'}
+                      <h4 style={{ fontWeight: 800, fontSize: 14 }}>{tariff.service} - {tariff.type_tarif.replace('_', ' ')}</h4>
+                      <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, marginBottom: 4 }}>
+                        Palier : de {parseFloat(tariff.palier_debut)} à {tariff.palier_fin !== null ? `${parseFloat(tariff.palier_fin)}` : '∞'} {tariff.service === 'SENELEC' ? 'kWh' : 'm³'}
+                      </p>
+                      <p style={{ fontSize: 10, color: 'var(--color-primary)', fontWeight: 600, marginBottom: 12 }}>
+                        Version Active : {new Date(tariff.effective_date).toLocaleDateString('fr-FR')}
                       </p>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label style={{ fontSize: 11 }}>Prix unitaire (FCFA)</label>
@@ -839,6 +937,7 @@ export default function App() {
                           <DollarSign size={16} />
                           <input 
                             type="number" 
+                            step="0.01"
                             defaultValue={tariff.prix_par_unite}
                             onBlur={(e) => handleUpdateTariff(tariff.id, parseFloat(e.target.value))}
                             style={{ paddingLeft: 12 }}
@@ -847,6 +946,34 @@ export default function App() {
                       </div>
                     </GlassCard>
                   ))}
+                </div>
+
+                <h3 style={{ fontSize: 16, fontWeight: 800, marginTop: 32, marginBottom: 16 }}>Paramètres Globaux du Moteur de Calcul</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                  {adminConfigs.map((config) => {
+                    const label = config.cle === 'senelec_seuil_tva' 
+                      ? 'Seuil pivot de la TVA Senelec (kWh)' 
+                      : 'Taux de réduction Tranche 1 Senelec (ex: 0.10 = -10%)';
+                    return (
+                      <GlassCard key={config.cle} style={{ padding: 16, borderLeft: '4px solid var(--color-warning)' }} hoverScale={false}>
+                        <h4 style={{ fontWeight: 800, fontSize: 13 }}>{label}</h4>
+                        <p style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4, marginBottom: 12 }}>
+                          Clé : <code>{config.cle}</code> | Version : {new Date(config.effective_date).toLocaleDateString('fr-FR')}
+                        </p>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <div className="input-wrapper">
+                            <input 
+                              type="number" 
+                              step="0.01"
+                              defaultValue={config.valeur}
+                              onBlur={(e) => handleUpdateConfig(config.cle, parseFloat(e.target.value))}
+                              style={{ paddingLeft: 12 }}
+                            />
+                          </div>
+                        </div>
+                      </GlassCard>
+                    );
+                  })}
                 </div>
               </GlassCard>
             </motion.div>
