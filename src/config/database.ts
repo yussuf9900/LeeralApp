@@ -8,6 +8,9 @@ const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
+  ssl: process.env.DATABASE_URL?.includes('render.com') || process.env.DATABASE_URL?.includes('dpg-')
+    ? { rejectUnauthorized: false }
+    : undefined,
 });
 
 // Simple helper to test connection on startup
