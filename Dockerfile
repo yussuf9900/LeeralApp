@@ -35,7 +35,7 @@ RUN npm ci --only=production --ignore-scripts
 # Copy compiled backend and frontend from builder
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/frontend/dist ./frontend/dist
-COPY --from=builder /app/init.sql ./init.sql
+COPY init.sql ./init.sql
 EXPOSE 3000
 ENV NODE_ENV=production
 CMD ["node", "dist/index.js"]
