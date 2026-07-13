@@ -60,6 +60,17 @@ CREATE TABLE IF NOT EXISTS configurations (
     cree_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Table: compteurs (Meters / Compteurs)
+CREATE TABLE IF NOT EXISTS compteurs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    utilisateur_id UUID NOT NULL REFERENCES utilisateurs(id) ON DELETE CASCADE,
+    nom VARCHAR(100) NOT NULL,
+    numero_compteur VARCHAR(100) NOT NULL,
+    service VARCHAR(50) NOT NULL, -- 'SENELEC' or 'SENEAU'
+    dernier_index NUMERIC(15,2) DEFAULT 0.00,
+    cree_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Ensure compatibility for existing tables (in case they were created before these columns were added)
 ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS budget_mensuel NUMERIC(15,2) NOT NULL DEFAULT 0.00;
 ALTER TABLE tarifs ADD COLUMN IF NOT EXISTS effective_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
@@ -74,6 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_factures_idempotency_key ON factures(idempotency_
 CREATE INDEX IF NOT EXISTS idx_tarifs_service ON tarifs(service);
 CREATE INDEX IF NOT EXISTS idx_tarifs_service_effective ON tarifs(service, effective_date DESC);
 CREATE INDEX IF NOT EXISTS idx_configurations_cle_effective ON configurations(cle, effective_date DESC);
+CREATE INDEX IF NOT EXISTS idx_compteurs_utilisateur_id ON compteurs(utilisateur_id);
 
 -- Seed basic tariff values for Senelec & Sen'Eau
 INSERT INTO tarifs (service, type_tarif, prix_par_unite, palier_debut, palier_fin) VALUES
