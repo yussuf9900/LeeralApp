@@ -43,6 +43,10 @@ export interface Facture {
   statut: 'PAYE' | 'NON_PAYE' | 'ANNULE';
   date_echeance: Date | string;
   idempotency_key: string; // Strict uniqueness constraint for stateless billing
+  ancien_index?: number | string | Decimal;
+  nouvel_index?: number | string | Decimal;
+  taxe_communale?: number | string | Decimal;
+  type_transaction?: string;
   cree_a?: Date;
   paye_a?: Date | null;
 }

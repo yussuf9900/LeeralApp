@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS factures (
     statut VARCHAR(20) NOT NULL DEFAULT 'NON_PAYE', -- 'PAYE', 'NON_PAYE', 'ANNULE'
     date_echeance DATE NOT NULL,
     idempotency_key VARCHAR(255) UNIQUE NOT NULL, -- Strict uniqueness constraint for stateless billing
+    ancien_index NUMERIC(15,2) DEFAULT 0.00,
+    nouvel_index NUMERIC(15,2) DEFAULT 0.00,
+    taxe_communale NUMERIC(15,2) DEFAULT 0.00,
+    type_transaction VARCHAR(50),
     cree_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     paye_a TIMESTAMP WITH TIME ZONE
 );
@@ -59,6 +63,10 @@ CREATE TABLE IF NOT EXISTS configurations (
 -- Ensure compatibility for existing tables (in case they were created before these columns were added)
 ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS budget_mensuel NUMERIC(15,2) NOT NULL DEFAULT 0.00;
 ALTER TABLE tarifs ADD COLUMN IF NOT EXISTS effective_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS ancien_index NUMERIC(15,2) DEFAULT 0.00;
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS nouvel_index NUMERIC(15,2) DEFAULT 0.00;
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS taxe_communale NUMERIC(15,2) DEFAULT 0.00;
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS type_transaction VARCHAR(50);
 
 -- Basic indexes for query optimizations
 CREATE INDEX IF NOT EXISTS idx_factures_utilisateur_id ON factures(utilisateur_id);
