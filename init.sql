@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS tarifs (
     prix_par_unite NUMERIC(15,2) NOT NULL, -- Financial field
     palier_debut NUMERIC(15,2) DEFAULT 0.00, -- Consumption field
     palier_fin NUMERIC(15,2), -- Consumption field
+    effective_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     cree_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -46,10 +47,25 @@ CREATE TABLE IF NOT EXISTS factures (
     paye_a TIMESTAMP WITH TIME ZONE
 );
 
+-- Table: configurations (System configurations / Parameters)
+CREATE TABLE IF NOT EXISTS configurations (
+    id SERIAL PRIMARY KEY,
+    cle VARCHAR(100) NOT NULL,
+    valeur NUMERIC(15,2) NOT NULL,
+    effective_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    cree_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Ensure compatibility for existing tables (in case they were created before these columns were added)
+ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS budget_mensuel NUMERIC(15,2) NOT NULL DEFAULT 0.00;
+ALTER TABLE tarifs ADD COLUMN IF NOT EXISTS effective_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
 -- Basic indexes for query optimizations
 CREATE INDEX IF NOT EXISTS idx_factures_utilisateur_id ON factures(utilisateur_id);
 CREATE INDEX IF NOT EXISTS idx_factures_idempotency_key ON factures(idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_tarifs_service ON tarifs(service);
+CREATE INDEX IF NOT EXISTS idx_tarifs_service_effective ON tarifs(service, effective_date DESC);
+CREATE INDEX IF NOT EXISTS idx_configurations_cle_effective ON configurations(cle, effective_date DESC);
 
 -- Seed basic tariff values for Senelec & Sen'Eau
 INSERT INTO tarifs (service, type_tarif, prix_par_unite, palier_debut, palier_fin) VALUES
@@ -62,3 +78,12 @@ INSERT INTO tarifs (service, type_tarif, prix_par_unite, palier_debut, palier_fi
 ('SENEAU', 'DISSUASIVE_ASSAINIE', 878.35, 40.00, NULL),
 ('SENEAU', 'DISSUASIVE_NON_ASSAINIE', 778.87, 40.00, NULL)
 ON CONFLICT DO NOTHING;
+
+-- Seed basic configuration parameters if they don't exist
+INSERT INTO configurations (cle, valeur)
+SELECT 'senelec_seuil_tva', 250.00
+WHERE NOT EXISTS (SELECT 1 FROM configurations WHERE cle = 'senelec_seuil_tva');
+
+INSERT INTO configurations (cle, valeur)
+SELECT 'senelec_reduction_t1', 0.10
+WHERE NOT EXISTS (SELECT 1 FROM configurations WHERE cle = 'senelec_reduction_t1');

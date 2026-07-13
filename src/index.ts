@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import apiRouter from './routes';
-import { testConnection } from './config/database';
+import { testConnection, initializeDatabaseSchema } from './config/database';
 
 dotenv.config();
 
@@ -49,6 +49,7 @@ app.listen(PORT, async () => {
   const dbConnected = await testConnection();
   if (dbConnected) {
     console.log('Database connected successfully.');
+    await initializeDatabaseSchema();
   } else {
     console.error('Database connection failed.');
   }
