@@ -215,7 +215,7 @@ export default function App() {
   };
 
   // --- Woyofal Top-up handlers ---
-  const handleWoyofalCalculate = async (data: { montant: number; modePaiement: 'CASH' | 'DIGITAL'; consoJournaliere: number }) => {
+  const handleWoyofalCalculate = async (data: { montant: number; modePaiement: 'CASH' | 'DIGITAL'; consoJournaliere: number; dateAchat?: string }) => {
     setSimResult(null);
     setSimSuccessMsg('');
     try {
@@ -223,6 +223,7 @@ export default function App() {
         montant: data.montant,
         mode_paiement: data.modePaiement,
         conso_journaliere: data.consoJournaliere,
+        date_achat: data.dateAchat,
         mode_facturation: 'WOYOFAL',
         type_calcul: 'PAR_MONTANT',
         save_to_history: false
@@ -236,7 +237,7 @@ export default function App() {
     }
   };
 
-  const handleWoyofalSave = async (montant: number, modePaiement: 'CASH' | 'DIGITAL', consoJournaliere: number) => {
+  const handleWoyofalSave = async (montant: number, modePaiement: 'CASH' | 'DIGITAL', consoJournaliere: number, dateAchat?: string) => {
     if (!simResult) return;
     setSimSaving(true);
     setSimSuccessMsg('');
@@ -246,6 +247,7 @@ export default function App() {
         montant,
         mode_paiement: modePaiement,
         conso_journaliere: consoJournaliere,
+        date_achat: dateAchat,
         mode_facturation: 'WOYOFAL',
         type_calcul: 'PAR_MONTANT',
         type_transaction: 'RECHARGE_WOYOFAL',
@@ -782,7 +784,7 @@ export default function App() {
                 <div style={{ gridColumn: '1 / -1' }}>
                   <WoyofalRechargeCard 
                     onCalculate={(data) => handleWoyofalCalculate(data)}
-                    onSaveRecharge={() => handleWoyofalSave(simResult?.montant_ttc || 5000, simModePaiement, 5)}
+                    onSaveRecharge={() => handleWoyofalSave(simResult?.montant_ttc || 5000, simModePaiement, 5, simResult?.date_achat)}
                     result={simResult}
                     loading={simSaving}
                     successMsg={simSuccessMsg}

@@ -40,9 +40,14 @@ export class FacturationController {
       type_transaction,
       mode_facturation, // 'WOYOFAL' or 'POSTPAID'
       type_calcul, // 'PAR_MONTANT' or 'PAR_KWH'
-      conso_journaliere
+      conso_journaliere,
+      date_achat,
+      purchase_date
     } = req.body;
     
+    const targetDateStr = date_achat || purchase_date;
+    const targetDate = targetDateStr ? new Date(targetDateStr) : new Date();
+
     const saveToHistory = save_to_history !== false;
     const isWoyofal = mode_facturation === 'WOYOFAL' || type_transaction === 'RECHARGE_WOYOFAL' || montant !== undefined || (!ancien_index && !nouvel_index && mode_facturation !== 'POSTPAID');
     const isReverseMontant = (type_calcul === 'PAR_MONTANT' || (montant !== undefined && !consommation)) && isWoyofal;
@@ -84,10 +89,11 @@ export class FacturationController {
             targetClientId,
             montant,
             mode_paiement,
-            conso_journaliere ? Number(conso_journaliere) : 5
+            conso_journaliere ? Number(conso_journaliere) : 5,
+            targetDate
           );
         } else {
-          calc = await SenelecWoyofalCalculator.calculer(targetClientId, conso, mode_paiement);
+          calc = await SenelecWoyofalCalculator.calculer(targetClientId, conso, mode_paiement, targetDate);
         }
       } else {
         // Postpaid 3-tranche calculation with TVA
@@ -140,12 +146,12 @@ export class FacturationController {
 
       const refPrefix = isWoyofal ? 'SEN-WOY' : 'SEN-POST';
       const ref = `${refPrefix}-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-      const echeance = new Date();
+      const echeance = new Date(targetDate);
       echeance.setDate(echeance.getDate() + (isWoyofal ? 0 : 15));
 
       const txType = type_transaction || (isWoyofal ? 'RECHARGE_WOYOFAL' : 'FACTURE_SENELEC');
       const statusValue = isWoyofal ? 'PAYE' : 'NON_PAYE';
-      const paidDateValue = isWoyofal ? new Date() : null;
+      const paidDateValue = isWoyofal ? targetDate : null;
 
       const insertQuery = `
         INSERT INTO factures (
@@ -153,9 +159,9 @@ export class FacturationController {
           montant_ht, tva, redevance, droit_de_timbre, 
           montant_ttc, mode_paiement, statut, date_echeance, 
           idempotency_key, paye_a, ancien_index, nouvel_index, taxe_communale,
-          type_transaction
+          type_transaction, cree_a
         )
-        VALUES ($1, 'SENELEC', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        VALUES ($1, 'SENELEC', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         RETURNING *
       `;
 
@@ -176,7 +182,8 @@ export class FacturationController {
         ancien_index !== undefined ? Number(ancien_index) : 0,
         nouvel_index !== undefined ? Number(nouvel_index) : 0,
         calc.taxe_communale.toString(),
-        txType
+        txType,
+        targetDate
       ]);
 
       res.status(201).json({

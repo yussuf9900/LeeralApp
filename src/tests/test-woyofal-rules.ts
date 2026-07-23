@@ -114,9 +114,26 @@ async function runTests() {
     console.log(`Montant TTC Total: ${postCalc.montant_ttc} FCFA`);
 
     if (postCalc.tva.lte(0)) {
-      throw new Error(`TEST 4 ÉCHOUÉ : La TVA devrait être strictement positive pour une consommation de 300 kWh (> 250 kWh)`);
+      throw new Error(`TEST 4 ÉCHOUÉ : La TVA devrait être strictly positive pour une consommation de 300 kWh (> 250 kWh)`);
     }
     console.log('✅ TEST 4 RÉUSSI : Calcul postpayé 3 tranches avec TVA 18% au-delà de 250 kWh vérifié !');
+
+    // ----------------------------------------------------
+    // TEST 5 : Reset Automatique au 1er du Mois Suivant (Date-Driven Reset)
+    // ----------------------------------------------------
+    console.log('\n--- TEST 5 : Woyofal Achat dans un Nouveau Mois (ex: 2026-08-05 vs 2026-07-23) ---');
+    const calcNextMonth = await SenelecWoyofalCalculator.calculerParMontant(testUserId, 5000, 'DIGITAL', 5, '2026-08-05');
+    console.log(`Date Achat Cible: 2026-08-05`);
+    console.log(`Cumul mois d'août avant achat: ${calcNextMonth.kwh_cumules_mois_avant} kWh (Doit être 0)`);
+    console.log(`Redevance prélevée: ${calcNextMonth.redevance} FCFA (1er achat d'août)`);
+
+    if (!calcNextMonth.kwh_cumules_mois_avant || !calcNextMonth.kwh_cumules_mois_avant.equals(new Decimal(0))) {
+      throw new Error(`TEST 5 ÉCHOUÉ : Le cumul d'un nouveau mois doit repartir à 0 kWh`);
+    }
+    if (!calcNextMonth.redevance.equals(new Decimal(429))) {
+      throw new Error(`TEST 5 ÉCHOUÉ : La redevance doit être prélevée au 1er achat du nouveau mois (429 FCFA)`);
+    }
+    console.log('✅ TEST 5 RÉUSSI : Reset du cumul mensuel et des frais fixes au 1er du mois validé !');
 
     console.log('\n====================================================');
     console.log('🎉 TOUS LES TESTS SONT AU VERT ET VALIDÉS !');

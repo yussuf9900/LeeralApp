@@ -7,6 +7,7 @@ interface WoyofalRechargeCardProps {
     montant: number;
     modePaiement: 'CASH' | 'DIGITAL';
     consoJournaliere: number;
+    dateAchat: string;
   }) => void;
   onSaveRecharge: () => void;
   result: any;
@@ -25,13 +26,14 @@ export default function WoyofalRechargeCard({
   const [customMontant, setCustomMontant] = useState<string>('5000');
   const [modePaiement, setModePaiement] = useState<'DIGITAL' | 'CASH'>('DIGITAL');
   const [consoJournaliere, setConsoJournaliere] = useState<number>(5);
+  const [dateAchat, setDateAchat] = useState<string>(new Date().toISOString().split('T')[0]);
 
   const presetAmounts = [1000, 2000, 5000, 10000, 20000];
 
   const handleSelectPreset = (val: number) => {
     setMontant(val);
     setCustomMontant(val.toString());
-    onCalculate({ montant: val, modePaiement, consoJournaliere });
+    onCalculate({ montant: val, modePaiement, consoJournaliere, dateAchat });
   };
 
   const handleCustomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -40,18 +42,23 @@ export default function WoyofalRechargeCard({
     const num = parseFloat(valStr);
     if (!isNaN(num) && num > 0) {
       setMontant(num);
-      onCalculate({ montant: num, modePaiement, consoJournaliere });
+      onCalculate({ montant: num, modePaiement, consoJournaliere, dateAchat });
     }
   };
 
   const handlePaiementChange = (mode: 'DIGITAL' | 'CASH') => {
     setModePaiement(mode);
-    onCalculate({ montant, modePaiement: mode, consoJournaliere });
+    onCalculate({ montant, modePaiement: mode, consoJournaliere, dateAchat });
   };
 
   const handleConsoChange = (val: number) => {
     setConsoJournaliere(val);
-    onCalculate({ montant, modePaiement, consoJournaliere: val });
+    onCalculate({ montant, modePaiement, consoJournaliere: val, dateAchat });
+  };
+
+  const handleDateChange = (val: string) => {
+    setDateAchat(val);
+    onCalculate({ montant, modePaiement, consoJournaliere, dateAchat: val });
   };
 
   return (
@@ -69,6 +76,28 @@ export default function WoyofalRechargeCard({
               Convertissez votre budget en kWh et calculez votre autonomie en jours
             </p>
           </div>
+        </div>
+
+        {/* Date d'achat Input */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
+            DATE D'ACHAT DE LA RECHARGE (RESET LE 1ER DU MOIS)
+          </label>
+          <input
+            type="date"
+            value={dateAchat}
+            onChange={(e) => handleDateChange(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: '1px solid var(--border-color)',
+              background: 'var(--bg-input)',
+              color: 'var(--text-primary)',
+              fontSize: 14,
+              fontWeight: 700
+            }}
+          />
         </div>
 
         {/* Preset Amounts Pills */}

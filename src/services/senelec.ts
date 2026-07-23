@@ -30,36 +30,38 @@ export class SenelecWoyofalCalculator {
   private static SEUIL_TRANCHE_1 = new Decimal(150);
 
   /**
-   * Get total cumulative kWh purchased in current calendar month for Senelec Woyofal
+   * Get total cumulative kWh purchased in target calendar month for Senelec Woyofal
    */
-  static async getMontantCumuleMois(utilisateurId: string): Promise<Decimal> {
+  static async getMontantCumuleMois(utilisateurId: string, dateAchat?: Date | string): Promise<Decimal> {
+    const targetDate = dateAchat ? new Date(dateAchat) : new Date();
     const query = `
       SELECT COALESCE(SUM(consommation), 0) as total_kwh
       FROM factures 
       WHERE utilisateur_id = $1 
         AND service = 'SENELEC' 
         AND type_transaction = 'RECHARGE_WOYOFAL'
-        AND EXTRACT(MONTH FROM cree_a) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
-        AND EXTRACT(YEAR FROM cree_a) = EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
+        AND EXTRACT(MONTH FROM cree_a) = EXTRACT(MONTH FROM $2::timestamp)
+        AND EXTRACT(YEAR FROM cree_a) = EXTRACT(YEAR FROM $2::timestamp)
     `;
-    const res = await pool.query(query, [utilisateurId]);
+    const res = await pool.query(query, [utilisateurId, targetDate]);
     return new Decimal(res.rows[0].total_kwh || 0);
   }
 
   /**
-   * Check if this is the user's first recharge of the current calendar month
+   * Check if this is the user's first recharge of the target calendar month
    */
-  static async estPremiereRechargeDuMois(utilisateurId: string): Promise<boolean> {
+  static async estPremiereRechargeDuMois(utilisateurId: string, dateAchat?: Date | string): Promise<boolean> {
+    const targetDate = dateAchat ? new Date(dateAchat) : new Date();
     const query = `
       SELECT COUNT(*) as count 
       FROM factures 
       WHERE utilisateur_id = $1 
         AND service = 'SENELEC' 
         AND type_transaction = 'RECHARGE_WOYOFAL'
-        AND EXTRACT(MONTH FROM cree_a) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
-        AND EXTRACT(YEAR FROM cree_a) = EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
+        AND EXTRACT(MONTH FROM cree_a) = EXTRACT(MONTH FROM $2::timestamp)
+        AND EXTRACT(YEAR FROM cree_a) = EXTRACT(YEAR FROM $2::timestamp)
     `;
-    const res = await pool.query(query, [utilisateurId]);
+    const res = await pool.query(query, [utilisateurId, targetDate]);
     const count = parseInt(res.rows[0].count, 10);
     return count === 0;
   }
@@ -72,7 +74,8 @@ export class SenelecWoyofalCalculator {
     utilisateurId: string,
     montantPaye: number | string | Decimal,
     modePaiement: 'CASH' | 'DIGITAL',
-    consoJournaliere: number = 5
+    consoJournaliere: number = 5,
+    dateAchat?: Date | string
   ): Promise<SenelecCalculationResult> {
     const montantTtcTarget = MathUtils.toDecimal(montantPaye);
     if (montantTtcTarget.lte(0)) {
@@ -108,9 +111,9 @@ export class SenelecWoyofalCalculator {
     const priceT1 = MathUtils.safeMultiply(sortedTariffs[0].prix_par_unite, new Decimal(1).minus(reductionT1)); // 82.00 FCFA
     const priceT2 = new Decimal(sortedTariffs[1].prix_par_unite); // 136.49 FCFA
 
-    // 2. Fetch user's cumulative monthly consumption & check if 1st recharge
-    const kwhCumulesAvant = await this.getMontantCumuleMois(utilisateurId);
-    const isFirst = await this.estPremiereRechargeDuMois(utilisateurId);
+    // 2. Fetch user's cumulative monthly consumption & check if 1st recharge for target month
+    const kwhCumulesAvant = await this.getMontantCumuleMois(utilisateurId, dateAchat);
+    const isFirst = await this.estPremiereRechargeDuMois(utilisateurId, dateAchat);
 
     // 3. Stamp duty handling
     let rawTotal: Decimal;
@@ -195,7 +198,8 @@ export class SenelecWoyofalCalculator {
   static async calculer(
     utilisateurId: string,
     consommation: number | string | Decimal,
-    modePaiement: 'CASH' | 'DIGITAL'
+    modePaiement: 'CASH' | 'DIGITAL',
+    dateAchat?: Date | string
   ): Promise<SenelecCalculationResult> {
     const conso = MathUtils.toDecimal(consommation);
     if (conso.isNegative()) {
@@ -230,8 +234,8 @@ export class SenelecWoyofalCalculator {
     const priceT1 = MathUtils.safeMultiply(sortedTariffs[0].prix_par_unite, new Decimal(1).minus(reductionT1)); // 82.00
     const priceT2 = new Decimal(sortedTariffs[1].prix_par_unite); // 136.49
 
-    const kwhCumulesAvant = await this.getMontantCumuleMois(utilisateurId);
-    const isFirst = await this.estPremiereRechargeDuMois(utilisateurId);
+    const kwhCumulesAvant = await this.getMontantCumuleMois(utilisateurId, dateAchat);
+    const isFirst = await this.estPremiereRechargeDuMois(utilisateurId, dateAchat);
 
     const t1QuotaRemaining = Decimal.max(0, this.SEUIL_TRANCHE_1.minus(kwhCumulesAvant));
 
