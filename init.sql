@@ -79,13 +79,29 @@ ALTER TABLE factures ADD COLUMN IF NOT EXISTS nouvel_index NUMERIC(15,2) DEFAULT
 ALTER TABLE factures ADD COLUMN IF NOT EXISTS taxe_communale NUMERIC(15,2) DEFAULT 0.00;
 ALTER TABLE factures ADD COLUMN IF NOT EXISTS type_transaction VARCHAR(50);
 
+-- Table: recommandations (User Recommendations & Energy Insights)
+CREATE TABLE IF NOT EXISTS recommandations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    utilisateur_id UUID NOT NULL REFERENCES utilisateurs(id) ON DELETE CASCADE,
+    service VARCHAR(50) NOT NULL, -- 'SENELEC' or 'SENEAU'
+    code_regle VARCHAR(50) NOT NULL, -- 'SENELEC_RULE_A', 'SENELEC_RULE_B', etc.
+    titre VARCHAR(150) NOT NULL,
+    message TEXT NOT NULL,
+    type_conseil VARCHAR(20) NOT NULL DEFAULT 'WARNING', -- 'GOOD_PRACTICE', 'WARNING', 'INFO'
+    lu BOOLEAN NOT NULL DEFAULT false,
+    cree_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Basic indexes for query optimizations
 CREATE INDEX IF NOT EXISTS idx_factures_utilisateur_id ON factures(utilisateur_id);
 CREATE INDEX IF NOT EXISTS idx_factures_idempotency_key ON factures(idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_factures_utilisateur_service_date ON factures(utilisateur_id, service, cree_a DESC);
 CREATE INDEX IF NOT EXISTS idx_tarifs_service ON tarifs(service);
 CREATE INDEX IF NOT EXISTS idx_tarifs_service_effective ON tarifs(service, effective_date DESC);
 CREATE INDEX IF NOT EXISTS idx_configurations_cle_effective ON configurations(cle, effective_date DESC);
 CREATE INDEX IF NOT EXISTS idx_compteurs_utilisateur_id ON compteurs(utilisateur_id);
+CREATE INDEX IF NOT EXISTS idx_recommandations_utilisateur ON recommandations(utilisateur_id, cree_a DESC);
+
 
 -- Seed basic tariff values for Senelec & Sen'Eau
 INSERT INTO tarifs (service, type_tarif, prix_par_unite, palier_debut, palier_fin) VALUES
