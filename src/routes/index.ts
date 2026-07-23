@@ -26,6 +26,7 @@ router.delete('/compteurs/:id', authMiddleware, CompteurController.deleteMeter);
 router.post('/facturation/senelec', authMiddleware, FacturationController.handleSenelecCalculation);
 router.post('/facturation/seneau', authMiddleware, FacturationController.handleSeneauCalculation);
 router.get('/facturation/history', authMiddleware, FacturationController.getHistory);
+router.get('/facturation/recommandations', authMiddleware, FacturationController.getRecommendations);
 router.put('/facturation/pay/:id', authMiddleware, FacturationController.payWaterBill);
 
 // --- ADMINISTRATION ROUTES ---
