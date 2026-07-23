@@ -25,7 +25,12 @@ app.use((req, res, next) => {
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
-  res.json({ status: 'UP', service: 'Leeral Facturation Multi-services' });
+  res.status(200).json({ 
+    status: 'UP', 
+    service: 'Sama Facture - Leeral',
+    timestamp: new Date().toISOString(),
+    uptime_seconds: Math.floor(process.uptime())
+  });
 });
 
 // API Routes
@@ -52,5 +57,21 @@ app.listen(PORT, async () => {
     await initializeDatabaseSchema();
   } else {
     console.error('Database connection failed.');
+  }
+
+  // Self-Ping / Keep-Alive Mechanism for Render Free Tier (every 14 minutes)
+  const serverUrl = process.env.RENDER_EXTERNAL_URL || process.env.SERVER_URL;
+  if (serverUrl) {
+    const pingIntervalMs = 14 * 60 * 1000;
+    setInterval(async () => {
+      try {
+        const healthUrl = `${serverUrl.replace(/\/$/, '')}/health`;
+        console.log(`[Keep-Alive] Sending ping to ${healthUrl}...`);
+        await fetch(healthUrl);
+      } catch (err: any) {
+        console.warn(`[Keep-Alive] Ping warning: ${err.message}`);
+      }
+    }, pingIntervalMs);
+    console.log(`[Keep-Alive] Self-ping active for ${serverUrl} (Interval: 14 min)`);
   }
 });
