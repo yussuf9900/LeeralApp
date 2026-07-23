@@ -46,6 +46,8 @@ import CostDetails from './components/simulator/CostDetails';
 import MeterCard from './components/meters/MeterCard';
 import MeterForm from './components/meters/MeterForm';
 import TransactionList from './components/history/TransactionList';
+import RecommendationsWidget from './components/dashboard/RecommendationsWidget';
+import WoyofalRechargeCard from './components/simulator/WoyofalRechargeCard';
 
 type TabType = 'dashboard' | 'simulator' | 'meters' | 'history' | 'profile' | 'tarifs' | 'utilisateurs' | 'audit';
 
@@ -83,6 +85,7 @@ export default function App() {
   const [dashboardStats, setDashboardStats] = useState<any>(null);
   const [meters, setMeters] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
 
   // Admin Data State
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
@@ -92,6 +95,7 @@ export default function App() {
 
   // Simulator State
   const [simService, setSimService] = useState<'SENELEC' | 'SENEAU'>('SENELEC');
+  const [simSenelecMode, setSimSenelecMode] = useState<'WOYOFAL' | 'POSTPAID'>('WOYOFAL');
   const [simAncienIndex, setSimAncienIndex] = useState<number>(0);
   const [simNouvelIndex, setSimNouvelIndex] = useState<number>(10);
   const [simModePaiement, setSimModePaiement] = useState<'CASH' | 'DIGITAL'>('DIGITAL');
@@ -143,6 +147,14 @@ export default function App() {
       // 4. Fetch History
       const hist = await apiRequest('/api/v1/facturation/history', 'GET', null, token);
       setHistory(hist);
+
+      // 5. Fetch Recommendations
+      try {
+        const recs = await apiRequest('/api/v1/facturation/recommandations', 'GET', null, token);
+        setRecommendations(recs);
+      } catch (e) {
+        console.warn('Recommandations non disponibles', e);
+      }
 
       // 5. Fetch Admin data if admin role
       if (profile.role === 'ADMIN') {
@@ -199,6 +211,57 @@ export default function App() {
       setAuthError(err.message || 'Authentification échouée.');
     } finally {
       setAuthLoading(false);
+    }
+  };
+
+  // --- Woyofal Top-up handlers ---
+  const handleWoyofalCalculate = async (data: { montant: number; modePaiement: 'CASH' | 'DIGITAL'; consoJournaliere: number }) => {
+    setSimResult(null);
+    setSimSuccessMsg('');
+    try {
+      const res = await apiRequest('/api/v1/facturation/senelec', 'POST', {
+        montant: data.montant,
+        mode_paiement: data.modePaiement,
+        conso_journaliere: data.consoJournaliere,
+        mode_facturation: 'WOYOFAL',
+        type_calcul: 'PAR_MONTANT',
+        save_to_history: false
+      }, token);
+      setSimResult(res.details);
+      if (res.recommandations) {
+        setRecommendations(res.recommandations);
+      }
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleWoyofalSave = async (montant: number, modePaiement: 'CASH' | 'DIGITAL', consoJournaliere: number) => {
+    if (!simResult) return;
+    setSimSaving(true);
+    setSimSuccessMsg('');
+    try {
+      const idKey = `IDEM-WOY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const res = await apiRequest('/api/v1/facturation/senelec', 'POST', {
+        montant,
+        mode_paiement: modePaiement,
+        conso_journaliere: consoJournaliere,
+        mode_facturation: 'WOYOFAL',
+        type_calcul: 'PAR_MONTANT',
+        type_transaction: 'RECHARGE_WOYOFAL',
+        save_to_history: true,
+        idempotency_key: idKey
+      }, token);
+
+      setSimSuccessMsg('Recharge Woyofal enregistrée avec succès dans votre budget !');
+      if (res.recommandations) {
+        setRecommendations(res.recommandations);
+      }
+      loadUserData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSimSaving(false);
     }
   };
 
@@ -538,6 +601,9 @@ export default function App() {
 
                 {/* Smart Savings Tip */}
                 <SavingsTip stats={dashboardStats} />
+
+                {/* Recommendations & Advice Widget */}
+                <RecommendationsWidget recommendations={recommendations} />
               </div>
             </motion.div>
           )}
@@ -681,9 +747,8 @@ export default function App() {
           {/* TAB 2: SIMULATOR */}
           {currentTab === 'simulator' && userProfile?.role !== 'ADMIN' && (
             <motion.div key="simulator" className="simulator-grid" {...tabTransition}>
-              {/* Left Column */}
-              <div className="simulator-left-col">
-                {/* Service Tabs */}
+              {/* Service & Mode Tabs */}
+              <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 10 }}>
                 <SegmentedControl 
                   selectedValue={simService}
                   onChange={(val) => {
@@ -692,109 +757,138 @@ export default function App() {
                   }}
                   activeColorClass={simService === 'SENELEC' ? 'senelec' : 'seneau'}
                   options={[
-                    { value: 'SENELEC', label: 'SENELEC (Elec)', icon: <Zap size={16} /> },
+                    { value: 'SENELEC', label: 'SENELEC (Électricité)', icon: <Zap size={16} /> },
                     { value: 'SENEAU', label: "SEN'EAU (Eau)", icon: <Droplet size={16} /> }
                   ]}
                 />
 
-                {/* Giant Index Cards */}
-                <div className="giant-index-grid">
-                  <IndexInputCard 
-                    label="Ancien Index"
-                    value={simAncienIndex}
+                {simService === 'SENELEC' && (
+                  <SegmentedControl 
+                    selectedValue={simSenelecMode}
                     onChange={(val) => {
-                      setSimAncienIndex(val);
+                      setSimSenelecMode(val);
                       setSimResult(null);
                     }}
-                    service={simService}
+                    activeColorClass="senelec"
+                    options={[
+                      { value: 'WOYOFAL', label: '⚡ Woyofal (Prépaiement FCFA)', icon: <Zap size={14} /> },
+                      { value: 'POSTPAID', label: '📄 Senelec Post-payé (Index)', icon: <FileText size={14} /> }
+                    ]}
                   />
-                  <IndexInputCard 
-                    label="Nouvel Index"
-                    value={simNouvelIndex}
-                    onChange={(val) => {
-                      setSimNouvelIndex(val);
-                      setSimResult(null);
-                    }}
-                    service={simService}
+                )}
+              </div>
+
+              {simService === 'SENELEC' && simSenelecMode === 'WOYOFAL' ? (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <WoyofalRechargeCard 
+                    onCalculate={(data) => handleWoyofalCalculate(data)}
+                    onSaveRecharge={() => handleWoyofalSave(simResult?.montant_ttc || 5000, simModePaiement, 5)}
+                    result={simResult}
+                    loading={simSaving}
+                    successMsg={simSuccessMsg}
                   />
                 </div>
-
-                {/* Config Options */}
-                <GlassCard style={{ padding: 20, marginBottom: 20 }} hoverScale={false}>
-                  <div className="form-group">
-                    <label>Mode de paiement</label>
-                    <div className="input-wrapper">
-                      <select 
-                        value={simModePaiement} 
-                        onChange={(e) => {
-                          setSimModePaiement(e.target.value as any);
+              ) : (
+                <>
+                  {/* Left Column for Postpaid Senelec / Sen'Eau */}
+                  <div className="simulator-left-col">
+                    <div className="giant-index-grid">
+                      <IndexInputCard 
+                        label="Ancien Index"
+                        value={simAncienIndex}
+                        onChange={(val) => {
+                          setSimAncienIndex(val);
                           setSimResult(null);
                         }}
-                        style={{ paddingLeft: 16 }}
-                      >
-                        <option value="DIGITAL">Digital (Orange Money, Wave, etc.)</option>
-                        <option value="CASH">Espèces (+1% droit de timbre)</option>
-                      </select>
+                        service={simService}
+                      />
+                      <IndexInputCard 
+                        label="Nouvel Index"
+                        value={simNouvelIndex}
+                        onChange={(val) => {
+                          setSimNouvelIndex(val);
+                          setSimResult(null);
+                        }}
+                        service={simService}
+                      />
                     </div>
+
+                    {/* Config Options */}
+                    <GlassCard style={{ padding: 20, marginBottom: 20 }} hoverScale={false}>
+                      <div className="form-group">
+                        <label>Mode de paiement</label>
+                        <div className="input-wrapper">
+                          <select 
+                            value={simModePaiement} 
+                            onChange={(e) => {
+                              setSimModePaiement(e.target.value as any);
+                              setSimResult(null);
+                            }}
+                            style={{ paddingLeft: 16 }}
+                          >
+                            <option value="DIGITAL">Digital (Orange Money, Wave, etc.)</option>
+                            <option value="CASH">Espèces (+1% droit de timbre)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {simService === 'SENEAU' && (
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label>Zone d'assainissement</label>
+                          <div className="input-wrapper">
+                            <select 
+                              value={simVilleType} 
+                              onChange={(e) => {
+                                setSimVilleType(e.target.value as any);
+                                setSimResult(null);
+                              }}
+                              style={{ paddingLeft: 16 }}
+                            >
+                              <option value="NON_ASSAINIE">Non Assainie (Sans Égouts)</option>
+                              <option value="ASSAINIE">Assainie (Avec Égouts)</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </GlassCard>
+
+                    <button className="btn-premium btn-premium-primary" onClick={handleCalculate} style={{ marginBottom: 20 }}>
+                      Calculer ma consommation
+                    </button>
                   </div>
 
-                  {simService === 'SENEAU' && (
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Zone d'assainissement</label>
-                      <div className="input-wrapper">
-                        <select 
-                          value={simVilleType} 
-                          onChange={(e) => {
-                            setSimVilleType(e.target.value as any);
-                            setSimResult(null);
-                          }}
-                          style={{ paddingLeft: 16 }}
-                        >
-                          <option value="NON_ASSAINIE">Non Assainie (Sans Égouts)</option>
-                          <option value="ASSAINIE">Assainie (Avec Égouts)</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </GlassCard>
+                  {/* Right Column for Postpaid Senelec / Sen'Eau */}
+                  <div className="simulator-right-col">
+                    {simResult ? (
+                      simService === 'SENELEC' ? (
+                        <BatteryGauge consumption={simResult.consommation} />
+                      ) : (
+                        <WaterBeaker consumption={simResult.consommation} />
+                      )
+                    ) : (
+                      <GlassCard style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px', fontWeight: 600 }} hoverScale={false}>
+                        Ajustez les index à gauche pour lancer le calcul en temps réel
+                      </GlassCard>
+                    )}
 
-                <button className="btn-premium btn-premium-primary" onClick={handleCalculate} style={{ marginBottom: 20 }}>
-                  Calculer ma consommation
-                </button>
-              </div>
-
-              {/* Right Column */}
-              <div className="simulator-right-col">
-                {/* Interactive visual battery or wave indicators */}
-                {simResult ? (
-                  simService === 'SENELEC' ? (
-                    <BatteryGauge consumption={simResult.consommation} />
-                  ) : (
-                    <WaterBeaker consumption={simResult.consommation} />
-                  )
-                ) : (
-                  <GlassCard style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px', fontWeight: 600 }} hoverScale={false}>
-                    Ajustez les index à gauche pour lancer le calcul en temps réel
-                  </GlassCard>
-                )}
-
-                {/* Cost invoice presentation receipt */}
-                {simResult && (
-                  <CostDetails 
-                    result={simResult}
-                    service={simService}
-                    onSave={handleSaveCalculation}
-                    saving={simSaving}
-                    successMsg={simSuccessMsg}
-                    budgetOverrunWarning={
-                      dashboardStats && dashboardStats.budget_mensuel > 0 && 
-                      (parseFloat(dashboardStats.total_depenses || 0) + parseFloat(simResult.montant_ttc) > parseFloat(dashboardStats.budget_mensuel))
-                        ? `Attention : Cet ajout dépassera votre budget mensuel de ${(parseFloat(dashboardStats.total_depenses || 0) + parseFloat(simResult.montant_ttc) - parseFloat(dashboardStats.budget_mensuel)).toLocaleString('fr-FR')} FCFA (Nouveau total projeté : ${(parseFloat(dashboardStats.total_depenses || 0) + parseFloat(simResult.montant_ttc)).toLocaleString('fr-FR')} / ${parseFloat(dashboardStats.budget_mensuel).toLocaleString('fr-FR')} FCFA).`
-                        : undefined
-                    }
-                  />
-                )}
-              </div>
+                    {simResult && (
+                      <CostDetails 
+                        result={simResult}
+                        service={simService}
+                        onSave={handleSaveCalculation}
+                        saving={simSaving}
+                        successMsg={simSuccessMsg}
+                        budgetOverrunWarning={
+                          dashboardStats && dashboardStats.budget_mensuel > 0 && 
+                          (parseFloat(dashboardStats.total_depenses || 0) + parseFloat(simResult.montant_ttc) > parseFloat(dashboardStats.budget_mensuel))
+                            ? `Attention : Cet ajout dépassera votre budget mensuel de ${(parseFloat(dashboardStats.total_depenses || 0) + parseFloat(simResult.montant_ttc) - parseFloat(dashboardStats.budget_mensuel)).toLocaleString('fr-FR')} FCFA (Nouveau total projeté : ${(parseFloat(dashboardStats.total_depenses || 0) + parseFloat(simResult.montant_ttc)).toLocaleString('fr-FR')} / ${parseFloat(dashboardStats.budget_mensuel).toLocaleString('fr-FR')} FCFA).`
+                            : undefined
+                        }
+                      />
+                    )}
+                  </div>
+                </>
+              )}
             </motion.div>
           )}
 
