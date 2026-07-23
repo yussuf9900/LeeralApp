@@ -784,7 +784,7 @@ export default function App() {
                 <div style={{ gridColumn: '1 / -1' }}>
                   <WoyofalRechargeCard 
                     onCalculate={(data) => handleWoyofalCalculate(data)}
-                    onSaveRecharge={() => handleWoyofalSave(simResult?.montant_ttc || 5000, simModePaiement, 5, simResult?.date_achat)}
+                    onSaveRecharge={(data) => handleWoyofalSave(data.montant, data.modePaiement, data.consoJournaliere, data.dateAchat)}
                     result={simResult}
                     loading={simSaving}
                     successMsg={simSuccessMsg}

@@ -169,3 +169,38 @@ select {
     border-color: rgba(239, 68, 68, 0.4);
   }
 }
+
+/* Input Focus & Custom Styling */
+input:focus, select:focus, textarea:focus {
+  border-color: var(--border-focus) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Custom Date Picker Theme Fix */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: var(--calendar-icon-filter, none);
+}
+
+[data-theme='dark'] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8) hue-rotate(180deg);
+}
+
+/* Service Badges */
+.service-badge {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 12px;
+}
+
+.service-badge.senelec {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.service-badge.seneau {
+  background: rgba(14, 165, 233, 0.15);
+  color: #0ea5e9;
+}
+
