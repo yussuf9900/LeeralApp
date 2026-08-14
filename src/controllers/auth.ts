@@ -50,7 +50,7 @@ export class AuthController {
       // Generate token
       const token = AuthService.generateToken(newUser);
 
-      res.status(211).json({
+      res.status(201).json({
         message: 'Utilisateur enregistré avec succès',
         token,
         user: {
