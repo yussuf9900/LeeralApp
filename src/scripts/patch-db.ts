@@ -10,10 +10,22 @@ const patchDb = async () => {
     process.exit(1);
   }
 
+  const isRemoteDb = process.env.DATABASE_SSL !== undefined
+    ? process.env.DATABASE_SSL === 'true'
+    : Boolean(
+        connectionString &&
+          !connectionString.includes('localhost') &&
+          !connectionString.includes('127.0.0.1') &&
+          !connectionString.includes('postgres:5432') &&
+          !connectionString.includes('@db:') &&
+          !connectionString.includes('@postgres:') &&
+          !connectionString.includes('db:5432')
+      );
+
   console.log('Connecting to the database to apply patch...');
   const client = new Client({
     connectionString,
-    ssl: connectionString.includes('render.com') || connectionString.includes('dpg-')
+    ssl: isRemoteDb
       ? { rejectUnauthorized: false }
       : undefined,
   });

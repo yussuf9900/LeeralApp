@@ -5,12 +5,24 @@ import path from 'path';
 
 dotenv.config();
 
+const isRemoteDb = process.env.DATABASE_SSL !== undefined
+  ? process.env.DATABASE_SSL === 'true'
+  : Boolean(
+      process.env.DATABASE_URL &&
+        !process.env.DATABASE_URL.includes('localhost') &&
+        !process.env.DATABASE_URL.includes('127.0.0.1') &&
+        !process.env.DATABASE_URL.includes('postgres:5432') &&
+        !process.env.DATABASE_URL.includes('@db:') &&
+        !process.env.DATABASE_URL.includes('@postgres:') &&
+        !process.env.DATABASE_URL.includes('db:5432')
+    );
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
-  ssl: process.env.DATABASE_URL?.includes('render.com') || process.env.DATABASE_URL?.includes('dpg-')
+  ssl: isRemoteDb
     ? { rejectUnauthorized: false }
     : undefined,
 });
@@ -34,9 +46,14 @@ export const initializeDatabaseSchema = async (): Promise<boolean> => {
     client = await pool.connect();
     console.log('Database connected. Starting schema initialization/migration...');
     
-    const sqlPath = path.join(__dirname, '../../init.sql');
-    if (!fs.existsSync(sqlPath)) {
-      console.warn(`Schema file not found at: ${sqlPath}. Skipping auto-migration.`);
+    const candidatePaths = [
+      path.join(__dirname, '../../init.sql'),
+      path.join(__dirname, '../init.sql'),
+      path.join(process.cwd(), 'init.sql'),
+    ];
+    const sqlPath = candidatePaths.find(p => fs.existsSync(p));
+    if (!sqlPath) {
+      console.warn('Schema file init.sql not found in expected locations. Skipping auto-migration.');
       return false;
     }
     
