@@ -23,7 +23,10 @@ import {
   LogOut,
   Users,
   FileText,
-  Activity
+  Activity,
+  Calendar,
+  Hash,
+  Sliders
 } from 'lucide-react';
 
 // Layout & UI Components
@@ -851,8 +854,8 @@ export default function App() {
                     }}
                     activeColorClass="senelec"
                     options={[
-                      { value: 'WOYOFAL', label: '⚡ Woyofal (Prépaiement FCFA)', icon: <Zap size={14} /> },
-                      { value: 'POSTPAID', label: '📄 Senelec Post-payé (Index)', icon: <FileText size={14} /> }
+                      { value: 'WOYOFAL', label: 'Woyofal (Prépaiement FCFA)', icon: <Zap size={14} /> },
+                      { value: 'POSTPAID', label: 'Senelec Post-payé (Index)', icon: <FileText size={14} /> }
                     ]}
                   />
                 )}
@@ -883,16 +886,16 @@ export default function App() {
                           <button 
                             className={`btn-premium ${simInputMode === 'INDEX' ? 'btn-premium-primary' : 'btn-premium-secondary'}`}
                             onClick={() => { setSimInputMode('INDEX'); setSimResult(null); }}
-                            style={{ flex: 1, padding: '8px 12px', fontSize: 12 }}
+                            style={{ flex: 1, padding: '8px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                           >
-                            🔢 Par Index Compteur
+                            <Hash size={13} /> Par Index Compteur
                           </button>
                           <button 
                             className={`btn-premium ${simInputMode === 'CONSO_DIRECTE' ? 'btn-premium-primary' : 'btn-premium-secondary'}`}
                             onClick={() => { setSimInputMode('CONSO_DIRECTE'); setSimResult(null); }}
-                            style={{ flex: 1, padding: '8px 12px', fontSize: 12 }}
+                            style={{ flex: 1, padding: '8px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                           >
-                            ⚡ Consommation kWh Directe
+                            <Zap size={13} /> Consommation kWh Directe
                           </button>
                         </div>
 
@@ -988,25 +991,25 @@ export default function App() {
                             type="button"
                             onClick={() => handlePeriodPresetChange('BIMONTHLY')}
                             className={`btn-premium ${simPeriodPreset === 'BIMONTHLY' ? 'btn-premium-primary' : 'btn-premium-secondary'}`}
-                            style={{ flex: 1, padding: '6px 8px', fontSize: 11 }}
+                            style={{ flex: 1, padding: '6px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
                           >
-                            📅 Bimestrielle (60j - Défaut)
+                            <Calendar size={13} /> Bimestrielle (60j)
                           </button>
                           <button 
                             type="button"
                             onClick={() => handlePeriodPresetChange('MONTHLY')}
                             className={`btn-premium ${simPeriodPreset === 'MONTHLY' ? 'btn-premium-primary' : 'btn-premium-secondary'}`}
-                            style={{ flex: 1, padding: '6px 8px', fontSize: 11 }}
+                            style={{ flex: 1, padding: '6px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
                           >
-                            📆 Mensuelle (30j)
+                            <Calendar size={13} /> Mensuelle (30j)
                           </button>
                           <button 
                             type="button"
                             onClick={() => handlePeriodPresetChange('CUSTOM')}
                             className={`btn-premium ${simPeriodPreset === 'CUSTOM' ? 'btn-premium-primary' : 'btn-premium-secondary'}`}
-                            style={{ flex: 1, padding: '6px 8px', fontSize: 11 }}
+                            style={{ flex: 1, padding: '6px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
                           >
-                            ✏️ Personnalisée
+                            <Sliders size={13} /> Personnalisée
                           </button>
                         </div>
 

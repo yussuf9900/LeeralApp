@@ -8,6 +8,7 @@ import {
   Sparkles, 
   CheckCircle2, 
   AlertCircle,
+  AlertTriangle,
   Clock,
   ArrowRight
 } from 'lucide-react';
@@ -310,7 +311,7 @@ export default function WoyofalRechargeCard({
         <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: 16, borderRadius: 14, border: '1px solid var(--border-color)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              ⚡ Consommation journalière estimée :
+              <Zap size={14} color="#f59e0b" fill="#f59e0b" /> Consommation journalière estimée :
             </span>
             <span style={{ fontSize: 14, fontWeight: 900, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.12)', padding: '2px 10px', borderRadius: 12 }}>
               {consoJournaliere} kWh / jour
@@ -425,7 +426,9 @@ export default function WoyofalRechargeCard({
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 6, color: 'var(--text-secondary)' }}>
                 <span>Tranche 1 (Économique @ 82.56 F/kWh)</span>
                 {isOverTranche1 ? (
-                  <strong style={{ color: '#ef4444' }}>⚠️ Passage en Tranche 2 (+ cher)</strong>
+                  <strong style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertTriangle size={13} /> Passage en Tranche 2 (+ cher)
+                  </strong>
                 ) : (
                   <span style={{ color: '#10b981' }}>{(150 - result.kwh_cumules_mois_apres).toFixed(1)} kWh restants à prix réduit</span>
                 )}

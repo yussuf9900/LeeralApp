@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { AlertTriangle } from 'lucide-react';
 import Counter from '../ui/Counter';
 
 interface CostDetailsProps {
@@ -193,12 +194,16 @@ export default function CostDetails({
             textAlign: 'center', 
             fontSize: 12, 
             fontWeight: 700, 
-            marginTop: 16 
+            marginTop: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6
           }}
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
         >
-          ⚠️ {budgetOverrunWarning}
+          <AlertTriangle size={14} /> {budgetOverrunWarning}
         </motion.div>
       )}
 

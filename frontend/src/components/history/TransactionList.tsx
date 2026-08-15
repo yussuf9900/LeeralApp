@@ -1,6 +1,6 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Droplet, CreditCard } from 'lucide-react';
+import { Zap, Droplet, CreditCard, Calendar } from 'lucide-react';
 
 interface TransactionListProps {
   history: any[];
@@ -72,8 +72,8 @@ export default function TransactionList({
                   </span>
                   
                   {periodStr && (
-                    <div style={{ fontSize: 11, color: 'var(--color-primary)', fontWeight: 700, marginTop: 2 }}>
-                      📅 {periodStr}
+                    <div style={{ fontSize: 11, color: 'var(--color-primary)', fontWeight: 700, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Calendar size={12} /> {periodStr}
                     </div>
                   )}
 
