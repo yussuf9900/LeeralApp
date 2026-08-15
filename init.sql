@@ -47,6 +47,11 @@ CREATE TABLE IF NOT EXISTS factures (
     nouvel_index NUMERIC(15,2) DEFAULT 0.00,
     taxe_communale NUMERIC(15,2) DEFAULT 0.00,
     type_transaction VARCHAR(50),
+    date_debut DATE,
+    date_fin DATE,
+    nombre_jours INTEGER DEFAULT 60,
+    periode VARCHAR(50),
+    compteur_id UUID REFERENCES compteurs(id) ON DELETE SET NULL,
     cree_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     paye_a TIMESTAMP WITH TIME ZONE
 );
@@ -78,6 +83,11 @@ ALTER TABLE factures ADD COLUMN IF NOT EXISTS ancien_index NUMERIC(15,2) DEFAULT
 ALTER TABLE factures ADD COLUMN IF NOT EXISTS nouvel_index NUMERIC(15,2) DEFAULT 0.00;
 ALTER TABLE factures ADD COLUMN IF NOT EXISTS taxe_communale NUMERIC(15,2) DEFAULT 0.00;
 ALTER TABLE factures ADD COLUMN IF NOT EXISTS type_transaction VARCHAR(50);
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS date_debut DATE;
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS date_fin DATE;
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS nombre_jours INTEGER DEFAULT 60;
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS periode VARCHAR(50);
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS compteur_id UUID REFERENCES compteurs(id) ON DELETE SET NULL;
 
 -- Table: recommandations (User Recommendations & Energy Insights)
 CREATE TABLE IF NOT EXISTS recommandations (

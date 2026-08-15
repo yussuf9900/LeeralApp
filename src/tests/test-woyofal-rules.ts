@@ -102,38 +102,77 @@ async function runTests() {
     console.log('✅ TEST 3 RÉUSSI : Alerte de basculement de tranche déclenchée avec succès !');
 
     // ----------------------------------------------------
-    // TEST 4 : Senelec Postpayé - Calcul Forward 3 Tranches + TVA
+    // TEST 4 : Senelec Postpayé - Calcul Bimestriel 60 jours (Prorata Défaut Senelec)
     // ----------------------------------------------------
-    console.log('\n--- TEST 4 : Senelec Postpayé (300 kWh ➔ 3 Tranches + TVA 18% > 250 kWh) ---');
-    const postCalc = await SenelecPostpaidCalculator.calculer(testUserId, 300, 'DIGITAL');
-    console.log(`Consommation: ${postCalc.consommation} kWh`);
-    console.log(`Montant T1 (150 kWh @ 82.00): ${postCalc.montant_t1} FCFA`);
-    console.log(`Montant T2 (100 kWh @ 136.49): ${postCalc.montant_t2} FCFA`);
-    console.log(`Montant T3 (50 kWh @ 136.49): ${postCalc.montant_t3} FCFA`);
-    console.log(`TVA 18% sur 50 kWh: ${postCalc.tva} FCFA`);
-    console.log(`Montant TTC Total: ${postCalc.montant_ttc} FCFA`);
+    console.log('\n--- TEST 4 : Senelec Postpayé Bimestriel 60 jours (350 kWh) ---');
+    const postCalc60 = await SenelecPostpaidCalculator.calculer(testUserId, 350, 'DIGITAL', { nombreJours: 60 });
+    console.log(`Période: ${postCalc60.nombre_jours} jours`);
+    console.log(`Consommation: ${postCalc60.consommation} kWh`);
+    console.log(`Limite T1 (300 kWh): ${postCalc60.limite_t1} kWh | Montant T1: ${postCalc60.montant_t1} FCFA`);
+    console.log(`Limite T2 (500 kWh): ${postCalc60.limite_t2} kWh | Montant T2: ${postCalc60.montant_t2} FCFA`);
+    console.log(`Redevance (429 x 2): ${postCalc60.redevance} FCFA`);
+    console.log(`TVA 18% (> 500 kWh): ${postCalc60.tva} FCFA`);
+    console.log(`Montant TTC Total: ${postCalc60.montant_ttc} FCFA`);
 
-    if (postCalc.tva.lte(0)) {
-      throw new Error(`TEST 4 ÉCHOUÉ : La TVA devrait être strictly positive pour une consommation de 300 kWh (> 250 kWh)`);
+    if (!postCalc60.redevance.equals(new Decimal(858))) {
+      throw new Error(`TEST 4 ÉCHOUÉ : Redevance pour 60 jours devrait être 858 FCFA, obtenu ${postCalc60.redevance}`);
     }
-    console.log('✅ TEST 4 RÉUSSI : Calcul postpayé 3 tranches avec TVA 18% au-delà de 250 kWh vérifié !');
+    if (!postCalc60.limite_t1?.equals(new Decimal(300))) {
+      throw new Error(`TEST 4 ÉCHOUÉ : Limite T1 pour 60j devrait être 300 kWh, obtenu ${postCalc60.limite_t1}`);
+    }
+    if (!postCalc60.tva.equals(new Decimal(0))) {
+      throw new Error(`TEST 4 ÉCHOUÉ : La TVA devrait être 0 FCFA pour 350 kWh sur 60 jours (< 500 kWh threshold)`);
+    }
+    console.log('✅ TEST 4 RÉUSSI : Calcul Senelec Postpayé 60 jours proratisé vérifié !');
 
     // ----------------------------------------------------
-    // TEST 5 : Reset Automatique au 1er du Mois Suivant (Date-Driven Reset)
+    // TEST 5 : Senelec Postpayé Bimestriel 60 jours avec Dépassement TVA (> 500 kWh)
     // ----------------------------------------------------
-    console.log('\n--- TEST 5 : Woyofal Achat dans un Nouveau Mois (ex: 2026-08-05 vs 2026-07-23) ---');
+    console.log('\n--- TEST 5 : Senelec Postpayé Bimestriel 60 jours (600 kWh ➔ TVA > 500 kWh) ---');
+    const postCalcTva = await SenelecPostpaidCalculator.calculer(testUserId, 600, 'DIGITAL', { nombreJours: 60 });
+    console.log(`Consommation: ${postCalcTva.consommation} kWh`);
+    console.log(`TVA 18% sur 100 kWh excessif: ${postCalcTva.tva} FCFA`);
+
+    if (postCalcTva.tva.lte(0)) {
+      throw new Error(`TEST 5 ÉCHOUÉ : La TVA devrait être strictement positive pour 600 kWh sur 60j (> 500 kWh)`);
+    }
+    console.log('✅ TEST 5 RÉUSSI : Seuil de TVA à 500 kWh pour 60j validé avec succès !');
+
+    // ----------------------------------------------------
+    // TEST 6 : Senelec Postpayé Mensuel 30 jours (Prorata 1 mois)
+    // ----------------------------------------------------
+    console.log('\n--- TEST 6 : Senelec Postpayé Mensuel 30 jours (350 kWh) ---');
+    const postCalc30 = await SenelecPostpaidCalculator.calculer(testUserId, 350, 'DIGITAL', { nombreJours: 30 });
+    console.log(`Période: ${postCalc30.nombre_jours} jours`);
+    console.log(`Limite T1 (150 kWh): ${postCalc30.limite_t1} kWh`);
+    console.log(`Limite T2 (250 kWh): ${postCalc30.limite_t2} kWh`);
+    console.log(`Redevance: ${postCalc30.redevance} FCFA`);
+    console.log(`TVA 18% (> 250 kWh): ${postCalc30.tva} FCFA`);
+
+    if (!postCalc30.redevance.equals(new Decimal(429))) {
+      throw new Error(`TEST 6 ÉCHOUÉ : Redevance pour 30j devrait être 429 FCFA, obtenu ${postCalc30.redevance}`);
+    }
+    if (postCalc30.tva.lte(0)) {
+      throw new Error(`TEST 6 ÉCHOUÉ : La TVA devrait s'appliquer pour 350 kWh sur 30j (> 250 kWh)`);
+    }
+    console.log('✅ TEST 6 RÉUSSI : Calcul mensuel 30 jours et déclenchement de TVA à 250 kWh validé !');
+
+    // ----------------------------------------------------
+    // TEST 7 : Reset Automatique au 1er du Mois Suivant (Date-Driven Reset Woyofal)
+    // ----------------------------------------------------
+    console.log('\n--- TEST 7 : Woyofal Achat dans un Nouveau Mois (ex: 2026-08-05 vs 2026-07-23) ---');
     const calcNextMonth = await SenelecWoyofalCalculator.calculerParMontant(testUserId, 5000, 'DIGITAL', 5, '2026-08-05');
     console.log(`Date Achat Cible: 2026-08-05`);
     console.log(`Cumul mois d'août avant achat: ${calcNextMonth.kwh_cumules_mois_avant} kWh (Doit être 0)`);
     console.log(`Redevance prélevée: ${calcNextMonth.redevance} FCFA (1er achat d'août)`);
 
     if (!calcNextMonth.kwh_cumules_mois_avant || !calcNextMonth.kwh_cumules_mois_avant.equals(new Decimal(0))) {
-      throw new Error(`TEST 5 ÉCHOUÉ : Le cumul d'un nouveau mois doit repartir à 0 kWh`);
+      throw new Error(`TEST 7 ÉCHOUÉ : Le cumul d'un nouveau mois doit repartir à 0 kWh`);
     }
     if (!calcNextMonth.redevance.equals(new Decimal(429))) {
-      throw new Error(`TEST 5 ÉCHOUÉ : La redevance doit être prélevée au 1er achat du nouveau mois (429 FCFA)`);
+      throw new Error(`TEST 7 ÉCHOUÉ : La redevance doit être prélevée au 1er achat du nouveau mois (429 FCFA)`);
     }
-    console.log('✅ TEST 5 RÉUSSI : Reset du cumul mensuel et des frais fixes au 1er du mois validé !');
+    console.log('✅ TEST 7 RÉUSSI : Reset du cumul mensuel et des frais fixes au 1er du mois validé !');
 
     console.log('\n====================================================');
     console.log('🎉 TOUS LES TESTS SONT AU VERT ET VALIDÉS !');

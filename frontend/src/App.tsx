@@ -104,6 +104,38 @@ export default function App() {
   const [simSaving, setSimSaving] = useState(false);
   const [simSuccessMsg, setSimSuccessMsg] = useState('');
 
+  // Senelec Postpaid Period & Input Mode States
+  const [simPeriodPreset, setSimPeriodPreset] = useState<'BIMONTHLY' | 'MONTHLY' | 'CUSTOM'>('BIMONTHLY');
+  const [simDateDebut, setSimDateDebut] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 60);
+    return d.toISOString().split('T')[0];
+  });
+  const [simDateFin, setSimDateFin] = useState<string>(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+  const [simInputMode, setSimInputMode] = useState<'INDEX' | 'CONSO_DIRECTE'>('INDEX');
+  const [simDirectConso, setSimDirectConso] = useState<number>(300);
+  const [simSelectedCompteurId, setSimSelectedCompteurId] = useState<string>('');
+
+  const handlePeriodPresetChange = (preset: 'BIMONTHLY' | 'MONTHLY' | 'CUSTOM') => {
+    setSimPeriodPreset(preset);
+    setSimResult(null);
+    const end = new Date();
+    const endStr = end.toISOString().split('T')[0];
+    setSimDateFin(endStr);
+    
+    if (preset === 'BIMONTHLY') {
+      const start = new Date();
+      start.setDate(start.getDate() - 60);
+      setSimDateDebut(start.toISOString().split('T')[0]);
+    } else if (preset === 'MONTHLY') {
+      const start = new Date();
+      start.setDate(start.getDate() - 30);
+      setSimDateDebut(start.toISOString().split('T')[0]);
+    }
+  };
+
   // Meters Management Feedback
   const [meterMsg, setMeterMsg] = useState('');
 
@@ -272,19 +304,41 @@ export default function App() {
     setSimResult(null);
     setSimSuccessMsg('');
     try {
-      if (simNouvelIndex < simAncienIndex) {
-        throw new Error("Le nouvel index doit être supérieur ou égal à l'ancien index.");
+      if (simService === 'SENELEC' && simSenelecMode === 'POSTPAID' && simInputMode === 'INDEX') {
+        if (simNouvelIndex < simAncienIndex) {
+          throw new Error("Le nouvel index doit être supérieur ou égal à l'ancien index.");
+        }
       }
 
       let res;
       if (simService === 'SENELEC') {
-        res = await apiRequest('/api/v1/facturation/senelec', 'POST', {
-          ancien_index: simAncienIndex,
-          nouvel_index: simNouvelIndex,
+        const payload: any = {
           mode_paiement: simModePaiement,
+          mode_facturation: simSenelecMode,
           save_to_history: false
-        }, token);
+        };
+
+        if (simSenelecMode === 'POSTPAID') {
+          payload.type_calcul = simInputMode === 'CONSO_DIRECTE' ? 'PAR_CONSO' : 'PAR_INDEX';
+          if (simInputMode === 'CONSO_DIRECTE') {
+            payload.consommation = simDirectConso;
+          } else {
+            payload.ancien_index = simAncienIndex;
+            payload.nouvel_index = simNouvelIndex;
+          }
+          payload.date_debut = simDateDebut;
+          payload.date_fin = simDateFin;
+          payload.compteur_id = simSelectedCompteurId || undefined;
+        } else {
+          payload.ancien_index = simAncienIndex;
+          payload.nouvel_index = simNouvelIndex;
+        }
+
+        res = await apiRequest('/api/v1/facturation/senelec', 'POST', payload, token);
       } else {
+        if (simNouvelIndex < simAncienIndex) {
+          throw new Error("Le nouvel index doit être supérieur ou égal à l'ancien index.");
+        }
         res = await apiRequest('/api/v1/facturation/seneau', 'POST', {
           ancien_index: simAncienIndex,
           nouvel_index: simNouvelIndex,
@@ -305,18 +359,38 @@ export default function App() {
     setSimSaving(true);
     setSimSuccessMsg('');
     try {
-      const typeTx = simService === 'SENELEC' ? 'RECHARGE_WOYOFAL' : 'FACTURE_EAU';
-      const idKey = `IDEM-WOY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const isSenelecPostpaid = simService === 'SENELEC' && simSenelecMode === 'POSTPAID';
+      const typeTx = isSenelecPostpaid 
+        ? 'FACTURE_SENELEC' 
+        : (simService === 'SENELEC' ? 'RECHARGE_WOYOFAL' : 'FACTURE_EAU');
+      const idKey = `IDEM-BILL-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
       
       if (simService === 'SENELEC') {
-        await apiRequest('/api/v1/facturation/senelec', 'POST', {
-          ancien_index: simAncienIndex,
-          nouvel_index: simNouvelIndex,
+        const payload: any = {
           mode_paiement: simModePaiement,
+          mode_facturation: simSenelecMode,
           type_transaction: typeTx,
           save_to_history: true,
           idempotency_key: idKey
-        }, token);
+        };
+
+        if (isSenelecPostpaid) {
+          payload.type_calcul = simInputMode === 'CONSO_DIRECTE' ? 'PAR_CONSO' : 'PAR_INDEX';
+          if (simInputMode === 'CONSO_DIRECTE') {
+            payload.consommation = simDirectConso;
+          } else {
+            payload.ancien_index = simAncienIndex;
+            payload.nouvel_index = simNouvelIndex;
+          }
+          payload.date_debut = simDateDebut;
+          payload.date_fin = simDateFin;
+          payload.compteur_id = simSelectedCompteurId || undefined;
+        } else {
+          payload.ancien_index = simAncienIndex;
+          payload.nouvel_index = simNouvelIndex;
+        }
+
+        await apiRequest('/api/v1/facturation/senelec', 'POST', payload, token);
       } else {
         await apiRequest('/api/v1/facturation/seneau', 'POST', {
           ancien_index: simAncienIndex,
@@ -329,7 +403,7 @@ export default function App() {
         }, token);
       }
 
-      setSimSuccessMsg('Enregistré avec succès dans votre budget !');
+      setSimSuccessMsg('Facture enregistrée avec succès dans votre budget !');
       loadUserData();
     } catch (err: any) {
       alert(err.message);
@@ -432,8 +506,12 @@ export default function App() {
 
   const startSimulationFromMeter = (meter: any) => {
     setSimService(meter.service);
-    setSimAncienIndex(parseFloat(meter.dernier_index));
-    setSimNouvelIndex(parseFloat(meter.dernier_index) + 10);
+    if (meter.service === 'SENELEC') {
+      setSimSenelecMode('POSTPAID');
+      setSimSelectedCompteurId(meter.id);
+    }
+    setSimAncienIndex(parseFloat(meter.dernier_index || 0));
+    setSimNouvelIndex(parseFloat(meter.dernier_index || 0) + 10);
     setSimResult(null);
     setCurrentTab('simulator');
   };
@@ -794,28 +872,177 @@ export default function App() {
                 <>
                   {/* Left Column for Postpaid Senelec / Sen'Eau */}
                   <div className="simulator-left-col">
-                    <div className="giant-index-grid">
-                      <IndexInputCard 
-                        label="Ancien Index"
-                        value={simAncienIndex}
-                        onChange={(val) => {
-                          setSimAncienIndex(val);
-                          setSimResult(null);
-                        }}
-                        service={simService}
-                      />
-                      <IndexInputCard 
-                        label="Nouvel Index"
-                        value={simNouvelIndex}
-                        onChange={(val) => {
-                          setSimNouvelIndex(val);
-                          setSimResult(null);
-                        }}
-                        service={simService}
-                      />
-                    </div>
+                    {simService === 'SENELEC' && simSenelecMode === 'POSTPAID' && (
+                      <GlassCard style={{ padding: 20, marginBottom: 20 }} hoverScale={false}>
+                        <h4 style={{ fontSize: 13, fontWeight: 800, marginBottom: 12, color: 'var(--text-primary)' }}>
+                          1. Mode de Saisie & Compteur
+                        </h4>
 
-                    {/* Config Options */}
+                        {/* Input Mode Switch */}
+                        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+                          <button 
+                            className={`btn-premium ${simInputMode === 'INDEX' ? 'btn-premium-primary' : 'btn-premium-secondary'}`}
+                            onClick={() => { setSimInputMode('INDEX'); setSimResult(null); }}
+                            style={{ flex: 1, padding: '8px 12px', fontSize: 12 }}
+                          >
+                            🔢 Par Index Compteur
+                          </button>
+                          <button 
+                            className={`btn-premium ${simInputMode === 'CONSO_DIRECTE' ? 'btn-premium-primary' : 'btn-premium-secondary'}`}
+                            onClick={() => { setSimInputMode('CONSO_DIRECTE'); setSimResult(null); }}
+                            style={{ flex: 1, padding: '8px 12px', fontSize: 12 }}
+                          >
+                            ⚡ Consommation kWh Directe
+                          </button>
+                        </div>
+
+                        {/* Meter Selector */}
+                        {meters.filter(m => m.service === 'SENELEC').length > 0 && (
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label>Compteur associé (Optionnel)</label>
+                            <div className="input-wrapper">
+                              <select 
+                                value={simSelectedCompteurId}
+                                onChange={(e) => {
+                                  const meterId = e.target.value;
+                                  setSimSelectedCompteurId(meterId);
+                                  const meter = meters.find(m => m.id === meterId);
+                                  if (meter) {
+                                    setSimAncienIndex(parseFloat(meter.dernier_index || 0));
+                                    setSimNouvelIndex(parseFloat(meter.dernier_index || 0) + 10);
+                                  }
+                                  setSimResult(null);
+                                }}
+                                style={{ paddingLeft: 16 }}
+                              >
+                                <option value="">-- Aucun compteur sélectionné --</option>
+                                {meters.filter(m => m.service === 'SENELEC').map(m => (
+                                  <option key={m.id} value={m.id}>
+                                    {m.nom} ({m.numero_compteur}) - Ancien index: {parseFloat(m.dernier_index || 0)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                      </GlassCard>
+                    )}
+
+                    {/* Consumption Entry Input Cards */}
+                    {simService === 'SENELEC' && simSenelecMode === 'POSTPAID' && simInputMode === 'CONSO_DIRECTE' ? (
+                      <GlassCard style={{ padding: 20, marginBottom: 20 }} hoverScale={false}>
+                        <h4 style={{ fontSize: 13, fontWeight: 800, marginBottom: 12, color: 'var(--text-primary)' }}>
+                          Consommation globale de la période (kWh)
+                        </h4>
+                        <div className="input-wrapper">
+                          <input 
+                            type="number"
+                            value={simDirectConso}
+                            onChange={(e) => {
+                              setSimDirectConso(Math.max(0, parseFloat(e.target.value) || 0));
+                              setSimResult(null);
+                            }}
+                            placeholder="Ex: 350"
+                            style={{ fontSize: 18, fontWeight: 800, padding: 12 }}
+                          />
+                        </div>
+                      </GlassCard>
+                    ) : (
+                      <div className="giant-index-grid">
+                        <IndexInputCard 
+                          label="Ancien Index"
+                          value={simAncienIndex}
+                          onChange={(val) => {
+                            setSimAncienIndex(val);
+                            setSimResult(null);
+                          }}
+                          service={simService}
+                        />
+                        <IndexInputCard 
+                          label="Nouvel Index"
+                          value={simNouvelIndex}
+                          onChange={(val) => {
+                            setSimNouvelIndex(val);
+                            setSimResult(null);
+                          }}
+                          service={simService}
+                        />
+                      </div>
+                    )}
+
+                    {/* Senelec Postpaid Billing Period Controls */}
+                    {simService === 'SENELEC' && simSenelecMode === 'POSTPAID' && (
+                      <GlassCard style={{ padding: 20, marginBottom: 20 }} hoverScale={false}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                          <h4 style={{ fontSize: 13, fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                            2. Période de Facturation (Senelec)
+                          </h4>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 8px', borderRadius: 10 }}>
+                            {Math.max(1, Math.round((new Date(simDateFin).getTime() - new Date(simDateDebut).getTime()) / (1000 * 3600 * 24)))} jours
+                          </span>
+                        </div>
+
+                        {/* Preset Buttons */}
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                          <button 
+                            type="button"
+                            onClick={() => handlePeriodPresetChange('BIMONTHLY')}
+                            className={`btn-premium ${simPeriodPreset === 'BIMONTHLY' ? 'btn-premium-primary' : 'btn-premium-secondary'}`}
+                            style={{ flex: 1, padding: '6px 8px', fontSize: 11 }}
+                          >
+                            📅 Bimestrielle (60j - Défaut)
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => handlePeriodPresetChange('MONTHLY')}
+                            className={`btn-premium ${simPeriodPreset === 'MONTHLY' ? 'btn-premium-primary' : 'btn-premium-secondary'}`}
+                            style={{ flex: 1, padding: '6px 8px', fontSize: 11 }}
+                          >
+                            📆 Mensuelle (30j)
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => handlePeriodPresetChange('CUSTOM')}
+                            className={`btn-premium ${simPeriodPreset === 'CUSTOM' ? 'btn-premium-primary' : 'btn-premium-secondary'}`}
+                            style={{ flex: 1, padding: '6px 8px', fontSize: 11 }}
+                          >
+                            ✏️ Personnalisée
+                          </button>
+                        </div>
+
+                        {/* Date Inputs */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label style={{ fontSize: 11 }}>Date de début</label>
+                            <input 
+                              type="date"
+                              value={simDateDebut}
+                              onChange={(e) => {
+                                setSimDateDebut(e.target.value);
+                                setSimPeriodPreset('CUSTOM');
+                                setSimResult(null);
+                              }}
+                              style={{ padding: '8px 10px', fontSize: 12, width: '100%', borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+                            />
+                          </div>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label style={{ fontSize: 11 }}>Date de fin</label>
+                            <input 
+                              type="date"
+                              value={simDateFin}
+                              onChange={(e) => {
+                                setSimDateFin(e.target.value);
+                                setSimPeriodPreset('CUSTOM');
+                                setSimResult(null);
+                              }}
+                              style={{ padding: '8px 10px', fontSize: 12, width: '100%', borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+                            />
+                          </div>
+                        </div>
+                      </GlassCard>
+                    )}
+
+                    {/* Payment & Options Card */}
                     <GlassCard style={{ padding: 20, marginBottom: 20 }} hoverScale={false}>
                       <div className="form-group">
                         <label>Mode de paiement</label>

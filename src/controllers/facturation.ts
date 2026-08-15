@@ -39,17 +39,24 @@ export class FacturationController {
       nouvel_index, 
       type_transaction,
       mode_facturation, // 'WOYOFAL' or 'POSTPAID'
-      type_calcul, // 'PAR_MONTANT' or 'PAR_KWH'
+      type_calcul, // 'PAR_MONTANT' or 'PAR_KWH' or 'PAR_INDEX' or 'PAR_CONSO'
       conso_journaliere,
       date_achat,
-      purchase_date
+      purchase_date,
+      date_facture,
+      date_debut,
+      date_fin,
+      nombre_jours,
+      periode,
+      compteur_id
     } = req.body;
     
-    const targetDateStr = date_achat || purchase_date;
+    // Determine target date for Senelec Postpaid / Woyofal
+    const targetDateStr = date_fin || date_facture || date_achat || purchase_date;
     const targetDate = targetDateStr ? new Date(targetDateStr) : new Date();
 
     const saveToHistory = save_to_history !== false;
-    const isWoyofal = mode_facturation === 'WOYOFAL' || type_transaction === 'RECHARGE_WOYOFAL' || montant !== undefined || (!ancien_index && !nouvel_index && mode_facturation !== 'POSTPAID');
+    const isWoyofal = mode_facturation === 'WOYOFAL' || type_transaction === 'RECHARGE_WOYOFAL' || montant !== undefined || (!ancien_index && !nouvel_index && mode_facturation !== 'POSTPAID' && type_calcul !== 'PAR_CONSO');
     const isReverseMontant = (type_calcul === 'PAR_MONTANT' || (montant !== undefined && !consommation)) && isWoyofal;
 
     if (!mode_paiement) {
@@ -64,13 +71,13 @@ export class FacturationController {
       return res.status(400).json({ error: 'Le montant de la recharge Woyofal en FCFA est requis.' });
     }
 
-    // Resolve consumption if index are sent
+    // Resolve consumption if index are sent or direct consumption provided
     let conso = consommation;
     if (conso === undefined && ancien_index !== undefined && nouvel_index !== undefined) {
       conso = Number(nouvel_index) - Number(ancien_index);
     }
 
-    if (!isReverseMontant && conso === undefined) {
+    if (!isReverseMontant && (conso === undefined || Number(conso) < 0)) {
       return res.status(400).json({ error: 'Champs consommation (ou index nouveau/ancien) requis.' });
     }
 
@@ -96,8 +103,13 @@ export class FacturationController {
           calc = await SenelecWoyofalCalculator.calculer(targetClientId, conso, mode_paiement, targetDate);
         }
       } else {
-        // Postpaid 3-tranche calculation with TVA
-        calc = await SenelecPostpaidCalculator.calculer(targetClientId, conso, mode_paiement);
+        // Postpaid 3-tranche calculation with TVA & period options
+        calc = await SenelecPostpaidCalculator.calculer(targetClientId, conso, mode_paiement, {
+          dateDebut: date_debut,
+          dateFin: date_fin,
+          nombreJours: nombre_jours ? Number(nombre_jours) : undefined,
+          dateFacture: date_facture
+        });
       }
 
       const details = {
@@ -111,6 +123,12 @@ export class FacturationController {
         montant_t2: Number(calc.montant_t2),
         montant_t3: Number(calc.montant_t3),
         taxe_communale: Number(calc.taxe_communale),
+        nombre_jours: calc.nombre_jours,
+        limite_t1: calc.limite_t1 ? Number(calc.limite_t1) : undefined,
+        limite_t2: calc.limite_t2 ? Number(calc.limite_t2) : undefined,
+        seuil_tva: calc.seuil_tva ? Number(calc.seuil_tva) : undefined,
+        date_debut: calc.date_debut,
+        date_fin: calc.date_fin,
         kwh_t1: calc.kwh_t1 ? Number(calc.kwh_t1) : undefined,
         kwh_t2: calc.kwh_t2 ? Number(calc.kwh_t2) : undefined,
         kwh_cumules_mois_avant: calc.kwh_cumules_mois_avant ? Number(calc.kwh_cumules_mois_avant) : undefined,
@@ -153,15 +171,21 @@ export class FacturationController {
       const statusValue = isWoyofal ? 'PAYE' : 'NON_PAYE';
       const paidDateValue = isWoyofal ? targetDate : null;
 
+      const dateDebutVal = date_debut ? new Date(date_debut) : null;
+      const dateFinVal = date_fin ? new Date(date_fin) : targetDate;
+      const nbJoursVal = calc.nombre_jours || nombre_jours || 60;
+      const periodeVal = periode || (date_debut && date_fin ? `${date_debut} - ${date_fin}` : `${nbJoursVal} jours`);
+      const compteurIdVal = compteur_id || null;
+
       const insertQuery = `
         INSERT INTO factures (
           utilisateur_id, service, reference_facture, consommation, 
           montant_ht, tva, redevance, droit_de_timbre, 
           montant_ttc, mode_paiement, statut, date_echeance, 
           idempotency_key, paye_a, ancien_index, nouvel_index, taxe_communale,
-          type_transaction, cree_a
+          type_transaction, cree_a, date_debut, date_fin, nombre_jours, periode, compteur_id
         )
-        VALUES ($1, 'SENELEC', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        VALUES ($1, 'SENELEC', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
         RETURNING *
       `;
 
@@ -183,8 +207,21 @@ export class FacturationController {
         nouvel_index !== undefined ? Number(nouvel_index) : 0,
         calc.taxe_communale.toString(),
         txType,
-        targetDate
+        targetDate,
+        dateDebutVal,
+        dateFinVal,
+        nbJoursVal,
+        periodeVal,
+        compteurIdVal
       ]);
+
+      // Synchronize meter's last index if a meter was associated
+      if (compteurIdVal && nouvel_index !== undefined && Number(nouvel_index) > 0) {
+        await pool.query(
+          'UPDATE compteurs SET dernier_index = $1 WHERE id = $2 AND utilisateur_id = $3',
+          [Number(nouvel_index), compteurIdVal, targetClientId]
+        );
+      }
 
       res.status(201).json({
         message: isWoyofal ? 'Recharge Woyofal effectuée et enregistrée avec succès.' : 'Facture Senelec générée avec succès.',

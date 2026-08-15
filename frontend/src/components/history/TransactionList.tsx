@@ -24,8 +24,19 @@ export default function TransactionList({
       <AnimatePresence>
         {history.map((item, index) => {
           const isSenelec = item.service === 'SENELEC';
+          const isWoyofal = item.type_transaction === 'RECHARGE_WOYOFAL';
           const isPaye = item.statut === 'PAYE';
           
+          let title = "Facture Sen'Eau";
+          if (isSenelec) {
+            title = isWoyofal ? 'Recharge Woyofal' : 'Facture Senelec';
+          }
+
+          const hasPeriodDates = item.date_debut && item.date_fin;
+          const periodStr = hasPeriodDates 
+            ? `${new Date(item.date_debut).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} - ${new Date(item.date_fin).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })} (${item.nombre_jours || 60} j)`
+            : (item.nombre_jours ? `Période de ${item.nombre_jours} jours` : null);
+
           return (
             <motion.div
               key={item.id}
@@ -48,17 +59,24 @@ export default function TransactionList({
                 {/* Left side details */}
                 <div style={{ flex: 1 }}>
                   <h4 style={{ fontSize: 14, fontWeight: 800 }}>
-                    {isSenelec ? 'Recharge Senelec' : "Facture Sen'Eau"}
+                    {title}
                   </h4>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
                     {new Date(item.cree_a).toLocaleDateString('fr-FR', {
                       day: 'numeric',
                       month: 'short',
+                      year: 'numeric',
                       hour: '2-digit',
                       minute: '2-digit'
                     })}
                   </span>
                   
+                  {periodStr && (
+                    <div style={{ fontSize: 11, color: 'var(--color-primary)', fontWeight: 700, marginTop: 2 }}>
+                      📅 {periodStr}
+                    </div>
+                  )}
+
                   {/* Additional info badge */}
                   <div style={{ 
                     display: 'flex', 
@@ -71,7 +89,11 @@ export default function TransactionList({
                     marginTop: 8,
                     fontWeight: 600
                   }}>
-                    <span>Index: {parseFloat(item.ancien_index)} &rarr; {parseFloat(item.nouvel_index)}</span>
+                    {item.ancien_index || item.nouvel_index ? (
+                      <span>Index: {parseFloat(item.ancien_index || 0)} &rarr; {parseFloat(item.nouvel_index || 0)}</span>
+                    ) : (
+                      <span>Saisie Directe</span>
+                    )}
                     <span>Consommé: {parseFloat(item.consommation)} {isSenelec ? 'kWh' : 'm³'}</span>
                   </div>
 
