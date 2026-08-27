@@ -339,18 +339,30 @@ export default function App() {
 
         res = await apiRequest('/api/v1/facturation/senelec', 'POST', payload, token);
       } else {
-        if (simNouvelIndex < simAncienIndex) {
+        if (simInputMode === 'INDEX' && simNouvelIndex < simAncienIndex) {
           throw new Error("Le nouvel index doit être supérieur ou égal à l'ancien index.");
         }
-        res = await apiRequest('/api/v1/facturation/seneau', 'POST', {
-          ancien_index: simAncienIndex,
-          nouvel_index: simNouvelIndex,
+        const payload: any = {
           mode_paiement: simModePaiement,
           ville_type: simVilleType,
-          save_to_history: false
-        }, token);
+          save_to_history: false,
+          type_calcul: simInputMode === 'CONSO_DIRECTE' ? 'PAR_CONSO' : 'PAR_INDEX',
+          date_debut: simDateDebut,
+          date_fin: simDateFin,
+          compteur_id: simSelectedCompteurId || undefined
+        };
+        if (simInputMode === 'CONSO_DIRECTE') {
+          payload.consommation = simDirectConso;
+        } else {
+          payload.ancien_index = simAncienIndex;
+          payload.nouvel_index = simNouvelIndex;
+        }
+        res = await apiRequest('/api/v1/facturation/seneau', 'POST', payload, token);
       }
       setSimResult(res.details);
+      if (res.recommandations) {
+        setRecommendations(res.recommandations);
+      }
     } catch (err: any) {
       alert(err.message);
     }
@@ -395,15 +407,26 @@ export default function App() {
 
         await apiRequest('/api/v1/facturation/senelec', 'POST', payload, token);
       } else {
-        await apiRequest('/api/v1/facturation/seneau', 'POST', {
-          ancien_index: simAncienIndex,
-          nouvel_index: simNouvelIndex,
+        const payload: any = {
           mode_paiement: simModePaiement,
           ville_type: simVilleType,
           type_transaction: typeTx,
           save_to_history: true,
-          idempotency_key: idKey
-        }, token);
+          idempotency_key: idKey,
+          type_calcul: simInputMode === 'CONSO_DIRECTE' ? 'PAR_CONSO' : 'PAR_INDEX',
+          date_debut: simDateDebut,
+          date_fin: simDateFin,
+          compteur_id: simSelectedCompteurId || undefined
+        };
+
+        if (simInputMode === 'CONSO_DIRECTE') {
+          payload.consommation = simDirectConso;
+        } else {
+          payload.ancien_index = simAncienIndex;
+          payload.nouvel_index = simNouvelIndex;
+        }
+
+        await apiRequest('/api/v1/facturation/seneau', 'POST', payload, token);
       }
 
       setSimSuccessMsg('Facture enregistrée avec succès dans votre budget !');
@@ -875,7 +898,8 @@ export default function App() {
                 <>
                   {/* Left Column for Postpaid Senelec / Sen'Eau */}
                   <div className="simulator-left-col">
-                    {simService === 'SENELEC' && simSenelecMode === 'POSTPAID' && (
+                    {/* 1. Mode de Saisie & Compteur */}
+                    {((simService === 'SENELEC' && simSenelecMode === 'POSTPAID') || simService === 'SENEAU') && (
                       <GlassCard style={{ padding: 20, marginBottom: 20 }} hoverScale={false}>
                         <h4 style={{ fontSize: 13, fontWeight: 800, marginBottom: 12, color: 'var(--text-primary)' }}>
                           1. Mode de Saisie & Compteur
@@ -895,12 +919,12 @@ export default function App() {
                             onClick={() => { setSimInputMode('CONSO_DIRECTE'); setSimResult(null); }}
                             style={{ flex: 1, padding: '8px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                           >
-                            <Zap size={13} /> Consommation kWh Directe
+                            {simService === 'SENELEC' ? <Zap size={13} /> : <Droplet size={13} />} Consommation {simService === 'SENELEC' ? 'kWh' : 'm³'} Directe
                           </button>
                         </div>
 
                         {/* Meter Selector */}
-                        {meters.filter(m => m.service === 'SENELEC').length > 0 && (
+                        {meters.filter(m => m.service === simService).length > 0 && (
                           <div className="form-group" style={{ marginBottom: 0 }}>
                             <label>Compteur associé (Optionnel)</label>
                             <div className="input-wrapper">
@@ -912,14 +936,14 @@ export default function App() {
                                   const meter = meters.find(m => m.id === meterId);
                                   if (meter) {
                                     setSimAncienIndex(parseFloat(meter.dernier_index || 0));
-                                    setSimNouvelIndex(parseFloat(meter.dernier_index || 0) + 10);
+                                    setSimNouvelIndex(parseFloat(meter.dernier_index || 0) + (simService === 'SENELEC' ? 10 : 5));
                                   }
                                   setSimResult(null);
                                 }}
                                 style={{ paddingLeft: 16 }}
                               >
                                 <option value="">-- Aucun compteur sélectionné --</option>
-                                {meters.filter(m => m.service === 'SENELEC').map(m => (
+                                {meters.filter(m => m.service === simService).map(m => (
                                   <option key={m.id} value={m.id}>
                                     {m.nom} ({m.numero_compteur}) - Ancien index: {parseFloat(m.dernier_index || 0)}
                                   </option>
@@ -932,10 +956,10 @@ export default function App() {
                     )}
 
                     {/* Consumption Entry Input Cards */}
-                    {simService === 'SENELEC' && simSenelecMode === 'POSTPAID' && simInputMode === 'CONSO_DIRECTE' ? (
+                    {((simService === 'SENELEC' && simSenelecMode === 'POSTPAID') || simService === 'SENEAU') && simInputMode === 'CONSO_DIRECTE' ? (
                       <GlassCard style={{ padding: 20, marginBottom: 20 }} hoverScale={false}>
                         <h4 style={{ fontSize: 13, fontWeight: 800, marginBottom: 12, color: 'var(--text-primary)' }}>
-                          Consommation globale de la période (kWh)
+                          Consommation globale de la période ({simService === 'SENELEC' ? 'kWh' : 'm³'})
                         </h4>
                         <div className="input-wrapper">
                           <input 
@@ -945,7 +969,7 @@ export default function App() {
                               setSimDirectConso(Math.max(0, parseFloat(e.target.value) || 0));
                               setSimResult(null);
                             }}
-                            placeholder="Ex: 350"
+                            placeholder={simService === 'SENELEC' ? 'Ex: 350' : 'Ex: 30'}
                             style={{ fontSize: 18, fontWeight: 800, padding: 12 }}
                           />
                         </div>
@@ -973,12 +997,12 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Senelec Postpaid Billing Period Controls */}
-                    {simService === 'SENELEC' && simSenelecMode === 'POSTPAID' && (
+                    {/* Billing Period Controls */}
+                    {((simService === 'SENELEC' && simSenelecMode === 'POSTPAID') || simService === 'SENEAU') && (
                       <GlassCard style={{ padding: 20, marginBottom: 20 }} hoverScale={false}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                           <h4 style={{ fontSize: 13, fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-                            2. Période de Facturation (Senelec)
+                            2. Période de Facturation ({simService === 'SENELEC' ? 'Senelec' : "Sen'Eau"})
                           </h4>
                           <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 8px', borderRadius: 10 }}>
                             {Math.max(1, Math.round((new Date(simDateFin).getTime() - new Date(simDateDebut).getTime()) / (1000 * 3600 * 24)))} jours
@@ -1095,7 +1119,11 @@ export default function App() {
                       simService === 'SENELEC' ? (
                         <BatteryGauge consumption={simResult.consommation} />
                       ) : (
-                        <WaterBeaker consumption={simResult.consommation} />
+                        <WaterBeaker 
+                          consumption={simResult.consommation} 
+                          limiteSociale={simResult.limite_sociale}
+                          limitePleine={simResult.limite_pleine}
+                        />
                       )
                     ) : (
                       <GlassCard style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px', fontWeight: 600 }} hoverScale={false}>

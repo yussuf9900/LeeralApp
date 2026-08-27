@@ -2,22 +2,28 @@
 
 interface WaterBeakerProps {
   consumption: number;
+  limiteSociale?: number;
+  limitePleine?: number;
 }
 
-export default function WaterBeaker({ consumption }: WaterBeakerProps) {
-  // Max capacity to display in beaker (e.g. 50 m3)
-  const maxCapacity = 50;
+export default function WaterBeaker({ 
+  consumption,
+  limiteSociale = 20,
+  limitePleine = 40
+}: WaterBeakerProps) {
+  // Max capacity to display in beaker (dynamically scaled or default 50 m3)
+  const maxCapacity = Math.max(50, limitePleine * 1.25);
   const heightPercent = Math.min((consumption / maxCapacity) * 100, 100);
 
-  // Determine color/message based on tranches: T1 (0-20), T2 (20-40), T3 (>40)
-  let statusText = 'Tranche Sociale';
+  // Determine color/message based on dynamic tranches
+  let statusText = `Tranche Sociale (0-${limiteSociale} m³)`;
   let statusColor = '#0ea5e9'; // Light blue
 
-  if (consumption > 40) {
-    statusText = 'Tranche Dissuasive';
+  if (consumption > limitePleine) {
+    statusText = `Tranche Dissuasive (>${limitePleine} m³)`;
     statusColor = '#ef4444'; // Red
-  } else if (consumption > 20) {
-    statusText = 'Tranche Pleine';
+  } else if (consumption > limiteSociale) {
+    statusText = `Tranche Pleine (${limiteSociale}-${limitePleine} m³)`;
     statusColor = '#3b82f6'; // Medium blue
   }
 

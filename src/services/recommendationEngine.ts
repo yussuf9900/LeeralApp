@@ -139,10 +139,16 @@ export class RecommendationEngineService {
     detailsCalc: {
       consommation: number;
       montant_ttc: number;
+      limite_sociale?: number;
+      limite_pleine?: number;
+      volume_dissuasive?: number;
+      nombre_jours?: number;
     }
   ): Promise<Recommendation[]> {
     const recommendations: Recommendation[] = [];
     const volumeConso = detailsCalc.consommation;
+    const limiteSociale = detailsCalc.limite_sociale ?? 20;
+    const limitePleine = detailsCalc.limite_pleine ?? 40;
 
     // --- Règle Eau A : Fuite probable (+50% par rapport à la moyenne) ---
     const historyQuery = `
@@ -172,24 +178,25 @@ export class RecommendationEngineService {
       }
     }
 
-    // --- Règle Eau B : Tranche dissuasive (> 40 m³) ---
-    if (volumeConso > 40) {
+    // --- Règle Eau B : Tranche dissuasive (> limite_pleine) ---
+    const isDissuasive = (detailsCalc.volume_dissuasive !== undefined && detailsCalc.volume_dissuasive > 0) || volumeConso > limitePleine;
+    if (isDissuasive) {
       const rec: Recommendation = {
         utilisateur_id: utilisateurId,
         service: 'SENEAU',
         code_regle: 'SENEAU_RULE_B',
         titre: 'Tranche Dissuasive atteinte',
-        message: 'Attention, votre consommation actuelle vous fait basculer dans la tranche tarifaire la plus chère (Dissuasive). Pensez à limiter les arrosages ou lavages à grande eau.',
+        message: `Attention, votre consommation (${volumeConso} m³) vous fait basculer dans la tranche tarifaire la plus chère (au-delà de ${limitePleine} m³ pour cette période). Pensez à limiter les arrosages ou lavages à grande eau.`,
         type_conseil: 'WARNING'
       };
       recommendations.push(rec);
       await this.enregistrerConseil(rec);
     }
 
-    // --- Règle Eau C : Félicitations Tranche Sociale (2 factures consécutives <= 20 m³) ---
+    // --- Règle Eau C : Félicitations Tranche Sociale (2 factures consécutives <= limite_sociale) ---
     if (historyRes.rows.length >= 2) {
       const lastTwo = historyRes.rows.slice(0, 2).map(r => Number(r.consommation));
-      if (lastTwo.every(c => c <= 20)) {
+      if (lastTwo.every(c => c <= limiteSociale)) {
         const rec: Recommendation = {
           utilisateur_id: utilisateurId,
           service: 'SENEAU',

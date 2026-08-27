@@ -241,7 +241,26 @@ export class FacturationController {
    * Handle Seneau Water bill creation
    */
   static async handleSeneauCalculation(req: Request, res: Response): Promise<any> {
-    const { consommation, mode_paiement, client_id, include_caution, calibre, save_to_history, ancien_index, nouvel_index, type_transaction } = req.body;
+    const { 
+      consommation, 
+      mode_paiement, 
+      client_id, 
+      include_caution, 
+      calibre, 
+      save_to_history, 
+      ancien_index, 
+      nouvel_index, 
+      type_transaction,
+      type_calcul, // 'PAR_INDEX' or 'PAR_CONSO'
+      date_debut,
+      date_fin,
+      nombre_jours,
+      date_facture,
+      periode,
+      compteur_id,
+      ville_type
+    } = req.body;
+    
     const saveToHistory = save_to_history !== false;
 
     let conso = consommation;
@@ -271,7 +290,12 @@ export class FacturationController {
 
       const calc = await SeneauCalculator.calculer(targetClientId, conso, mode_paiement, {
         includeCaution: include_caution === true,
-        calibre: calibre ? parseInt(calibre, 10) : undefined
+        calibre: calibre ? parseInt(calibre, 10) : undefined,
+        dateDebut: date_debut,
+        dateFin: date_fin,
+        nombreJours: nombre_jours ? Number(nombre_jours) : undefined,
+        dateFacture: date_facture,
+        villeType: ville_type
       });
 
       const details = {
@@ -284,6 +308,14 @@ export class FacturationController {
         montant_social: Number(calc.montant_social),
         montant_pleine: Number(calc.montant_pleine),
         montant_dissuasive: Number(calc.montant_dissuasive),
+        nombre_jours: calc.nombre_jours,
+        limite_sociale: calc.limite_sociale ? Number(calc.limite_sociale) : undefined,
+        limite_pleine: calc.limite_pleine ? Number(calc.limite_pleine) : undefined,
+        date_debut: calc.date_debut,
+        date_fin: calc.date_fin,
+        volume_social: calc.volume_social ? Number(calc.volume_social) : undefined,
+        volume_pleine: calc.volume_pleine ? Number(calc.volume_pleine) : undefined,
+        volume_dissuasive: calc.volume_dissuasive ? Number(calc.volume_dissuasive) : undefined
       };
 
       // Run recommendation engine analysis
@@ -311,17 +343,25 @@ export class FacturationController {
       }
 
       const ref = `SEN-EAU-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-      const echeance = new Date();
+      const targetDate = date_fin || date_facture ? new Date(date_fin || date_facture) : new Date();
+      const echeance = new Date(targetDate);
       echeance.setDate(echeance.getDate() + 30);
+
+      const dateDebutVal = date_debut ? new Date(date_debut) : null;
+      const dateFinVal = date_fin ? new Date(date_fin) : targetDate;
+      const nbJoursVal = calc.nombre_jours || nombre_jours || 60;
+      const periodeVal = periode || (date_debut && date_fin ? `${date_debut} - ${date_fin}` : `${nbJoursVal} jours`);
+      const compteurIdVal = compteur_id || null;
 
       const insertQuery = `
         INSERT INTO factures (
           utilisateur_id, service, reference_facture, consommation, 
           montant_ht, tva, redevance, droit_de_timbre, 
           montant_ttc, mode_paiement, statut, date_echeance, 
-          idempotency_key, ancien_index, nouvel_index, type_transaction
+          idempotency_key, ancien_index, nouvel_index, type_transaction,
+          cree_a, date_debut, date_fin, nombre_jours, periode, compteur_id
         )
-        VALUES ($1, 'SENEAU', $2, $3, $4, $5, $6, $7, $8, $9, 'NON_PAYE', $10, $11, $12, $13, $14)
+        VALUES ($1, 'SENEAU', $2, $3, $4, $5, $6, $7, $8, $9, 'NON_PAYE', $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
         RETURNING *
       `;
 
@@ -339,8 +379,22 @@ export class FacturationController {
         idempotencyKey,
         ancien_index !== undefined ? Number(ancien_index) : 0,
         nouvel_index !== undefined ? Number(nouvel_index) : 0,
-        type_transaction || 'FACTURE_EAU'
+        type_transaction || 'FACTURE_EAU',
+        targetDate,
+        dateDebutVal,
+        dateFinVal,
+        nbJoursVal,
+        periodeVal,
+        compteurIdVal
       ]);
+
+      // Synchronize meter's last index if a meter was associated
+      if (compteurIdVal && nouvel_index !== undefined && Number(nouvel_index) > 0) {
+        await pool.query(
+          'UPDATE compteurs SET dernier_index = $1 WHERE id = $2 AND utilisateur_id = $3',
+          [Number(nouvel_index), compteurIdVal, targetClientId]
+        );
+      }
 
       res.status(201).json({
         message: 'Facture d\'eau Sen\'Eau générée avec succès.',

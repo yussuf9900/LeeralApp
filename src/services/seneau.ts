@@ -2,6 +2,16 @@ import pool from '../config/database';
 import { MathUtils } from './math';
 import Decimal from 'decimal.js';
 
+export interface SeneauOptions {
+  includeCaution?: boolean;
+  calibre?: number;
+  dateDebut?: Date | string;
+  dateFin?: Date | string;
+  nombreJours?: number;
+  dateFacture?: Date | string;
+  villeType?: 'ASSAINIE' | 'NON_ASSAINIE';
+}
+
 export interface SeneauCalculationResult {
   consommation: Decimal;
   montant_ht: Decimal;
@@ -12,6 +22,15 @@ export interface SeneauCalculationResult {
   montant_social: Decimal;
   montant_pleine: Decimal;
   montant_dissuasive: Decimal;
+  // Sen'Eau Period metadata
+  nombre_jours?: number;
+  limite_sociale?: Decimal;
+  limite_pleine?: Decimal;
+  date_debut?: string;
+  date_fin?: string;
+  volume_social?: Decimal;
+  volume_pleine?: Decimal;
+  volume_dissuasive?: Decimal;
 }
 
 export class SeneauCalculator {
@@ -49,18 +68,31 @@ export class SeneauCalculator {
   }
 
   /**
-   * Perform Sen'Eau billing calculation
+   * Perform Sen'Eau billing calculation with dynamic period prorating (standard: 60 days)
    */
   static async calculer(
     utilisateurId: string,
     consommation: number | string | Decimal,
     modePaiement: 'CASH' | 'DIGITAL',
-    options?: { includeCaution?: boolean; calibre?: number }
+    options?: SeneauOptions
   ): Promise<SeneauCalculationResult> {
     const conso = MathUtils.toDecimal(consommation);
     if (conso.isNegative()) {
       throw new Error('La consommation ne peut pas être négative');
     }
+
+    // Determine billing duration N in days (standard Sen'Eau bimestrial bill = 60 days)
+    let nbJours = options?.nombreJours;
+    if (!nbJours && options?.dateDebut && options?.dateFin) {
+      const diffMs = new Date(options.dateFin).getTime() - new Date(options.dateDebut).getTime();
+      nbJours = Math.max(1, Math.round(diffMs / (1000 * 3600 * 24)));
+    }
+    if (!nbJours || nbJours <= 0) {
+      nbJours = 60;
+    }
+
+    // Ratio calculated against the standard 60-day bimestre
+    const ratio = new Decimal(nbJours).dividedBy(60);
 
     // 1. Fetch user details to get subvention status and city type
     const userRes = await pool.query(
@@ -73,7 +105,8 @@ export class SeneauCalculator {
     }
 
     const { is_subvented, ville_type } = userRes.rows[0];
-    const isAssainie = ville_type === 'ASSAINIE';
+    const effectiveVilleType = options?.villeType || ville_type || 'NON_ASSAINIE';
+    const isAssainie = effectiveVilleType === 'ASSAINIE';
 
     // 2. Fetch Sen'Eau tariffs from database to be dynamic (versioned)
     const tariffRes = await pool.query(
@@ -100,9 +133,13 @@ export class SeneauCalculator {
     const pricePleine = new Decimal(tPleine.prix_par_unite);
     const priceDissuasive = new Decimal(tDissuasive.prix_par_unite);
 
-    // Bimestrial brackets (monthly multiplied by 2):
-    const limitSocial = new Decimal(20);
-    const limitPleine = new Decimal(40);
+    // Dynamic brackets based on period duration N days (20 m³ and 40 m³ for standard 60-day period)
+    const limitSocial = new Decimal(20).times(ratio);
+    const limitPleine = new Decimal(40).times(ratio);
+
+    let volumeSocial = new Decimal(0);
+    let volumePleine = new Decimal(0);
+    let volumeDissuasive = new Decimal(0);
 
     let montantSocial = new Decimal(0);
     let montantPleine = new Decimal(0);
@@ -110,16 +147,20 @@ export class SeneauCalculator {
 
     // 3. Compute progressive brackets
     if (conso.lte(limitSocial)) {
-      montantSocial = MathUtils.safeMultiply(conso, priceSocial);
+      volumeSocial = conso;
+      montantSocial = MathUtils.safeMultiply(volumeSocial, priceSocial);
     } else if (conso.lte(limitPleine)) {
-      montantSocial = MathUtils.safeMultiply(limitSocial, priceSocial);
-      const remainingConso = MathUtils.safeSubtract(conso, limitSocial);
-      montantPleine = MathUtils.safeMultiply(remainingConso, pricePleine);
+      volumeSocial = limitSocial;
+      volumePleine = MathUtils.safeSubtract(conso, limitSocial);
+      montantSocial = MathUtils.safeMultiply(volumeSocial, priceSocial);
+      montantPleine = MathUtils.safeMultiply(volumePleine, pricePleine);
     } else {
-      montantSocial = MathUtils.safeMultiply(limitSocial, priceSocial);
-      montantPleine = MathUtils.safeMultiply(MathUtils.safeSubtract(limitPleine, limitSocial), pricePleine);
-      const remainingConso = MathUtils.safeSubtract(conso, limitPleine);
-      montantDissuasive = MathUtils.safeMultiply(remainingConso, priceDissuasive);
+      volumeSocial = limitSocial;
+      volumePleine = MathUtils.safeSubtract(limitPleine, limitSocial);
+      volumeDissuasive = MathUtils.safeSubtract(conso, limitPleine);
+      montantSocial = MathUtils.safeMultiply(volumeSocial, priceSocial);
+      montantPleine = MathUtils.safeMultiply(volumePleine, pricePleine);
+      montantDissuasive = MathUtils.safeMultiply(volumeDissuasive, priceDissuasive);
     }
 
     const montantHt = MathUtils.safeAdd(MathUtils.safeAdd(montantSocial, montantPleine), montantDissuasive);
@@ -153,6 +194,14 @@ export class SeneauCalculator {
       montant_social: MathUtils.roundFinancial(montantSocial),
       montant_pleine: MathUtils.roundFinancial(montantPleine),
       montant_dissuasive: MathUtils.roundFinancial(montantDissuasive),
+      nombre_jours: nbJours,
+      limite_sociale: MathUtils.roundFinancial(limitSocial),
+      limite_pleine: MathUtils.roundFinancial(limitPleine),
+      date_debut: options?.dateDebut ? new Date(options.dateDebut).toISOString().split('T')[0] : undefined,
+      date_fin: options?.dateFin ? new Date(options.dateFin).toISOString().split('T')[0] : undefined,
+      volume_social: MathUtils.roundFinancial(volumeSocial),
+      volume_pleine: MathUtils.roundFinancial(volumePleine),
+      volume_dissuasive: MathUtils.roundFinancial(volumeDissuasive)
     };
   }
 }

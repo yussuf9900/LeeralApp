@@ -47,18 +47,18 @@ export default function CostDetails({
         >
           {result.consommation} {isSenelec ? 'kWh' : 'm³'}
         </h3>
-        {isSenelec && result.nombre_jours && (
+        {result.nombre_jours && (
           <div style={{ 
             marginTop: 8, 
             fontSize: 12, 
             fontWeight: 700, 
-            color: 'var(--color-senelec)', 
-            background: 'rgba(234, 179, 8, 0.1)', 
+            color: isSenelec ? 'var(--color-senelec)' : 'var(--color-seneau)', 
+            background: isSenelec ? 'rgba(234, 179, 8, 0.1)' : 'rgba(2, 132, 199, 0.1)', 
             padding: '4px 12px', 
             borderRadius: 20, 
             display: 'inline-block' 
           }}>
-            Période : {result.nombre_jours} jours {result.nombre_jours === 60 ? '(Bimestre Senelec)' : ''}
+            Période : {result.nombre_jours} jours {result.nombre_jours === 60 ? `(Bimestre ${isSenelec ? 'Senelec' : "Sen'Eau"})` : ''}
           </div>
         )}
       </div>
@@ -97,21 +97,21 @@ export default function CostDetails({
             <div className="tranche-row">
               <span className="tranche-badge t1" />
               <div className="tranche-details">
-                <span>Tranche Sociale (0-20 m³)</span>
+                <span>Tranche Sociale (0-{result.limite_sociale ?? 20} m³)</span>
                 <span>{result.montant_social.toLocaleString()} F</span>
               </div>
             </div>
             <div className="tranche-row">
               <span className="tranche-badge t2" />
               <div className="tranche-details">
-                <span>Tranche Pleine (20-40 m³)</span>
+                <span>Tranche Pleine ({result.limite_sociale ?? 20}-{result.limite_pleine ?? 40} m³)</span>
                 <span>{result.montant_pleine.toLocaleString()} F</span>
               </div>
             </div>
             <div className="tranche-row">
               <span className="tranche-badge t3" />
               <div className="tranche-details">
-                <span>Tranche Dissuasive (&gt;40 m³)</span>
+                <span>Tranche Dissuasive (&gt;{result.limite_pleine ?? 40} m³)</span>
                 <span>{result.montant_dissuasive.toLocaleString()} F</span>
               </div>
             </div>
@@ -146,7 +146,7 @@ export default function CostDetails({
         )}
         
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Redevance / Frais Fixes ({result.nombre_jours ?? 30} j)</span>
+          <span>{isSenelec ? `Redevance / Frais Fixes (${result.nombre_jours ?? 60} j)` : 'Redevance / Frais fixes'}</span>
           <span style={{ color: 'var(--text-primary)' }}>{result.redevance.toLocaleString()} F</span>
         </div>
         
