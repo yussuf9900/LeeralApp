@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import apiRouter from './routes';
-import { testConnection, initializeDatabaseSchema } from './config/database';
+import { testConnection, initializeDatabaseSchema, default as pool } from './config/database';
 
 dotenv.config();
 
@@ -23,10 +23,27 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
-  res.status(200).json({ 
-    status: 'UP', 
+// Health check endpoint (pings Postgres/Supabase to prevent auto-pause)
+app.get('/health', async (req: Request, res: Response) => {
+  let dbStatus = 'healthy';
+  let dbLatencyMs: number | null = null;
+
+  try {
+    const start = Date.now();
+    await pool.query('SELECT 1');
+    dbLatencyMs = Date.now() - start;
+  } catch (err: any) {
+    dbStatus = 'unhealthy';
+    console.error('[HealthCheck] DB query failed:', err.message);
+  }
+
+  const isHealthy = dbStatus === 'healthy';
+  res.status(isHealthy ? 200 : 503).json({ 
+    status: isHealthy ? 'UP' : 'DEGRADED', 
+    database: {
+      status: dbStatus,
+      latency_ms: dbLatencyMs,
+    },
     service: 'Sama Facture - Leeral',
     timestamp: new Date().toISOString(),
     uptime_seconds: Math.floor(process.uptime())
