@@ -81,6 +81,9 @@ export default function TransactionList({
                   <div style={{ 
                     display: 'flex', 
                     justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 6,
                     fontSize: 11, 
                     color: 'var(--text-secondary)', 
                     background: 'rgba(148, 163, 184, 0.06)', 

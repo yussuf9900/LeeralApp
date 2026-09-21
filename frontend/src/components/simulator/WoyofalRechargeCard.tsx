@@ -135,11 +135,11 @@ export default function WoyofalRechargeCard({
 
         {/* Date d'achat & Reset Badge */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
             <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               <Calendar size={14} color="#f59e0b" /> Date d'achat de la recharge
             </label>
-            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', flexShrink: 0 }}>
               <Clock size={11} /> Reset le 1er du mois
             </span>
           </div>
@@ -166,7 +166,7 @@ export default function WoyofalRechargeCard({
           <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
             Choisissez un montant courant (FCFA)
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(85px, 1fr))', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 8 }}>
             {presetAmounts.map((preset) => {
               const isSelected = montant === preset.value;
               return (
@@ -220,88 +220,55 @@ export default function WoyofalRechargeCard({
         </div>
 
         {/* Custom Amount Input & Payment Mode Toggle */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        <div className="woyofal-custom-row">
+          <div className="woyofal-field-group">
+            <label className="woyofal-field-label">
               Montant Personnalisé
             </label>
-            <div style={{ position: 'relative' }}>
+            <div className="woyofal-input-box">
               <input
                 type="number"
                 value={customMontant}
                 onChange={handleCustomChange}
                 placeholder="ex: 5000"
-                style={{
-                  width: '100%',
-                  padding: '12px 14px',
-                  paddingRight: 55,
-                  borderRadius: 12,
-                  border: '1.5px solid var(--border-color)',
-                  background: 'var(--bg-input, rgba(15, 23, 42, 0.03))',
-                  color: 'var(--text-primary)',
-                  fontSize: 15,
-                  fontWeight: 800
-                }}
               />
-              <span style={{ position: 'absolute', right: 12, top: 13, fontSize: 12, color: 'var(--text-secondary)', fontWeight: 800 }}>
+              <span className="woyofal-input-unit">
                 FCFA
               </span>
             </div>
           </div>
 
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          <div className="woyofal-field-group">
+            <label className="woyofal-field-label">
               Mode de paiement
             </label>
-            <div style={{ display: 'flex', gap: 6, background: 'rgba(0, 0, 0, 0.04)', padding: 4, borderRadius: 12, border: '1px solid var(--border-color)' }}>
+            <div className="woyofal-toggle-box">
               <motion.button
-                whileTap={{ scale: 0.95 }}
+                whileTap={{ scale: 0.96 }}
                 type="button"
+                className="woyofal-toggle-btn"
                 onClick={() => handlePaiementChange('DIGITAL')}
                 style={{
-                  flex: 1,
-                  padding: '9px 6px',
-                  borderRadius: 10,
-                  fontSize: 12,
-                  fontWeight: 800,
-                  border: 'none',
-                  cursor: 'pointer',
                   background: modePaiement === 'DIGITAL' ? '#10b981' : 'transparent',
                   color: modePaiement === 'DIGITAL' ? '#ffffff' : 'var(--text-secondary)',
-                  boxShadow: modePaiement === 'DIGITAL' ? '0 2px 8px rgba(16, 185, 129, 0.3)' : 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 5,
-                  transition: 'all 0.2s ease'
+                  boxShadow: modePaiement === 'DIGITAL' ? '0 2px 8px rgba(16, 185, 129, 0.3)' : 'none'
                 }}
               >
-                <Smartphone size={14} /> Wave/OM
+                <Smartphone size={15} /> <span>Wave / OM</span>
               </motion.button>
 
               <motion.button
-                whileTap={{ scale: 0.95 }}
+                whileTap={{ scale: 0.96 }}
                 type="button"
+                className="woyofal-toggle-btn"
                 onClick={() => handlePaiementChange('CASH')}
                 style={{
-                  flex: 1,
-                  padding: '9px 6px',
-                  borderRadius: 10,
-                  fontSize: 12,
-                  fontWeight: 800,
-                  border: 'none',
-                  cursor: 'pointer',
                   background: modePaiement === 'CASH' ? '#f59e0b' : 'transparent',
                   color: modePaiement === 'CASH' ? '#ffffff' : 'var(--text-secondary)',
-                  boxShadow: modePaiement === 'CASH' ? '0 2px 8px rgba(245, 158, 11, 0.3)' : 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 5,
-                  transition: 'all 0.2s ease'
+                  boxShadow: modePaiement === 'CASH' ? '0 2px 8px rgba(245, 158, 11, 0.3)' : 'none'
                 }}
               >
-                <Banknote size={14} /> Espèces (+1%)
+                <Banknote size={15} /> <span>Espèces (+1%)</span>
               </motion.button>
             </div>
           </div>
@@ -309,11 +276,11 @@ export default function WoyofalRechargeCard({
 
         {/* Daily Consumption Rate Slider */}
         <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: 16, borderRadius: 14, border: '1px solid var(--border-color)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
               <Zap size={14} color="#f59e0b" fill="#f59e0b" /> Consommation journalière estimée :
             </span>
-            <span style={{ fontSize: 14, fontWeight: 900, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.12)', padding: '2px 10px', borderRadius: 12 }}>
+            <span style={{ fontSize: 14, fontWeight: 900, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.12)', padding: '2px 10px', borderRadius: 12, whiteSpace: 'nowrap', flexShrink: 0 }}>
               {consoJournaliere} kWh / jour
             </span>
           </div>
@@ -369,8 +336,8 @@ export default function WoyofalRechargeCard({
               <span style={{ fontSize: 11, fontWeight: 900, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 0.8 }}>
                 ÉNERGIE OBTENUE
               </span>
-              <div style={{ fontSize: 34, fontWeight: 900, color: 'var(--text-primary)', marginTop: 4 }}>
-                {result.consommation} <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-secondary)' }}>kWh</span>
+              <div style={{ fontSize: 'clamp(22px, 5vw, 32px)', fontWeight: 900, color: 'var(--text-primary)', marginTop: 4 }}>
+                {result.consommation} <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-secondary)' }}>kWh</span>
               </div>
             </motion.div>
 
@@ -382,15 +349,15 @@ export default function WoyofalRechargeCard({
                 textAlign: 'center', 
                 padding: 18, 
                 borderRadius: 16, 
-                background: 'rgba(16, 185, 129, 0.12)',
+                background: 'rgba(16, 185, 129, 0.12)', 
                 border: '1px solid rgba(16, 185, 129, 0.25)'
               }}
             >
               <span style={{ fontSize: 11, fontWeight: 900, color: '#10b981', textTransform: 'uppercase', letterSpacing: 0.8 }}>
                 AUTONOMIE ESTIMÉE
               </span>
-              <div style={{ fontSize: 34, fontWeight: 900, color: 'var(--text-primary)', marginTop: 4 }}>
-                ~{result.duree_estimee_jours || Math.round(result.consommation / consoJournaliere)} <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-secondary)' }}>Jours</span>
+              <div style={{ fontSize: 'clamp(22px, 5vw, 32px)', fontWeight: 900, color: 'var(--text-primary)', marginTop: 4 }}>
+                ~{result.duree_estimee_jours || Math.round(result.consommation / consoJournaliere)} <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-secondary)' }}>Jours</span>
               </div>
             </motion.div>
           </div>
