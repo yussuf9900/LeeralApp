@@ -36,23 +36,62 @@ app.use(
   })
 );
 
-// Secure CORS configuration
-const allowedOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
-  : ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000', 'http://127.0.0.1:3000'];
+// Secure CORS configuration with dynamic origin verification
+const isOriginAllowed = (origin: string | undefined, reqHost?: string): boolean => {
+  if (!origin) return true;
+  if (process.env.NODE_ENV !== 'production') return true;
+
+  try {
+    const originUrl = new URL(origin);
+
+    // Allow same host (e.g. monolith serving frontend & API)
+    if (reqHost) {
+      const hostWithoutPort = reqHost.split(':')[0];
+      if (originUrl.hostname === hostWithoutPort) return true;
+    }
+
+    // Allow localhost & local network for local testing/dev
+    if (originUrl.hostname === 'localhost' || originUrl.hostname === '127.0.0.1') return true;
+
+    // Allow Render deployments (*.onrender.com)
+    if (originUrl.hostname.endsWith('.onrender.com')) return true;
+
+    // Allow official production and staging domains
+    if (originUrl.hostname === 'leeral.sn' || originUrl.hostname.endsWith('.leeral.sn')) return true;
+  } catch {
+    // If URL parsing fails, continue to explicit allowed check
+  }
+
+  const configuredOrigins = [
+    ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()) : []),
+    process.env.RENDER_EXTERNAL_URL?.replace(/\/$/, ''),
+    process.env.SERVER_URL?.replace(/\/$/, ''),
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+  ].filter(Boolean) as string[];
+
+  return configuredOrigins.some((allowed) => {
+    try {
+      return new URL(allowed).origin === new URL(origin).origin;
+    } catch {
+      return allowed === origin;
+    }
+  });
+};
 
 app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, or dev)
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-        return callback(null, true);
-      }
-      return callback(new Error('Origine non autorisée par la politique CORS Leeral.'));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+  cors((req, callback) => {
+    const origin = req.headers.origin;
+    const host = req.get('host');
+    const allowed = isOriginAllowed(origin, host);
+    callback(null, {
+      origin: allowed ? (origin || true) : false,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+    });
   })
 );
 
