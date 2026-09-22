@@ -1,0 +1,55 @@
+{
+  "id": "sn.leeral.app",
+  "name": "Leeral - Facturation & Énergie Sénégal",
+  "short_name": "Leeral",
+  "description": "Simulateur officiel et gestionnaire intelligent des factures Senelec (Woyofal) et Sen'Eau au Sénégal.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#f59e0b",
+  "lang": "fr-SN",
+  "categories": ["utilities", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Simulateur Woyofal",
+      "short_name": "Woyofal",
+      "description": "Calculer une recharge Woyofal en FCFA ou kWh",
+      "url": "/?tab=simulator",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Mes Compteurs",
+      "short_name": "Compteurs",
+      "description": "Gérer les compteurs Senelec et Sen'Eau",
+      "url": "/?tab=meters",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}

@@ -2,6 +2,9 @@ import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
+import helmet from 'helmet';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import apiRouter from './routes';
 import { testConnection, initializeDatabaseSchema, default as pool } from './config/database';
 
@@ -10,18 +13,61 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy for reverse proxies (Render, Nginx, Cloudflare)
+app.set('trust proxy', 1);
+
+// HTTP Security Headers (Helmet) with modern CSP policy
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
+        connectSrc: ["'self'", 'https:', 'http:'],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
+
+// Secure CORS configuration
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+  : ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000', 'http://127.0.0.1:3000'];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, or dev)
+      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+      return callback(new Error('Origine non autorisée par la politique CORS Leeral.'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+  })
+);
+
 app.use(express.json());
 
-// Inline CORS configuration
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
+// Rate limiting on Auth endpoints (brute-force protection)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 30, // 30 requêtes par fenêtre
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes d\'authentification. Veuillez patienter 15 minutes.' },
 });
+
+app.use('/api/v1/auth', authLimiter);
 
 // Health check endpoint (pings Postgres/Supabase to prevent auto-pause)
 app.get('/health', async (req: Request, res: Response) => {
@@ -38,15 +84,15 @@ app.get('/health', async (req: Request, res: Response) => {
   }
 
   const isHealthy = dbStatus === 'healthy';
-  res.status(isHealthy ? 200 : 503).json({ 
-    status: isHealthy ? 'UP' : 'DEGRADED', 
+  res.status(isHealthy ? 200 : 503).json({
+    status: isHealthy ? 'UP' : 'DEGRADED',
     database: {
       status: dbStatus,
       latency_ms: dbLatencyMs,
     },
     service: 'Sama Facture - Leeral',
     timestamp: new Date().toISOString(),
-    uptime_seconds: Math.floor(process.uptime())
+    uptime_seconds: Math.floor(process.uptime()),
   });
 });
 

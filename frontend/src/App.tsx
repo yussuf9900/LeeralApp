@@ -33,6 +33,9 @@ import {
 import Header from './components/layout/Header';
 import BottomNav from './components/layout/BottomNav';
 import Sidebar from './components/layout/Sidebar';
+import NotificationCenter from './components/layout/NotificationCenter';
+import LegalModal, { type LegalTab } from './components/legal/LegalModal';
+import CookieConsentBanner from './components/legal/CookieConsentBanner';
 import Onboarding from './components/auth/Onboarding';
 import AuthCard from './components/auth/AuthCard';
 import GlassCard from './components/ui/GlassCard';
@@ -79,6 +82,24 @@ export default function App() {
   const [showIntro, setShowIntro] = useState<boolean>(!localStorage.getItem('leeral_token'));
   const [userProfile, setUserProfile] = useState<any>(null);
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard');
+
+  // Notifications State
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
+  const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState<boolean>(false);
+
+  // Legal Modal State (Mentions, Confidentialité CDP, CGU, Cookies)
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState<boolean>(false);
+  const [legalModalTab, setLegalModalTab] = useState<LegalTab>('mentions');
+
+  // Auth Recovery & Verification State from URL
+  const [initialResetToken, setInitialResetToken] = useState<string | null>(null);
+  const [initialResetEmail, setInitialResetEmail] = useState<string | null>(null);
+  const [emailVerifyBanner, setEmailVerifyBanner] = useState<string | null>(null);
+
+  const handleOpenLegalModal = (tab: LegalTab = 'mentions') => {
+    setLegalModalTab(tab);
+    setIsLegalModalOpen(true);
+  };
 
   // Auth form error state
   const [authError, setAuthError] = useState('');
@@ -152,6 +173,52 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  // Check URL parameters for password reset, email verification, or tab navigation
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const rToken = params.get('resetToken');
+    const rEmail = params.get('email');
+    const vToken = params.get('verifyToken');
+    const tabParam = params.get('tab');
+
+    if (rToken) {
+      setInitialResetToken(rToken);
+      if (rEmail) setInitialResetEmail(rEmail);
+      setShowIntro(false);
+    }
+
+    if (vToken) {
+      fetch(`/api/v1/auth/verify-email?token=${vToken}`)
+        .then(res => res.json())
+        .then(data => {
+          setEmailVerifyBanner(data.message || 'Votre adresse email a été validée avec succès !');
+        })
+        .catch(err => {
+          console.error(err);
+        });
+    }
+
+    if (tabParam && ['dashboard', 'simulator', 'meters', 'history', 'profile', 'tarifs', 'utilisateurs', 'audit'].includes(tabParam)) {
+      setCurrentTab(tabParam as TabType);
+    }
+  }, []);
+
+  // Periodic check of unread notifications when logged in
+  useEffect(() => {
+    if (!token) return;
+    const fetchUnread = async () => {
+      try {
+        const notifData = await apiRequest('/api/v1/notifications/unread-count', 'GET', null, token);
+        setUnreadNotifCount(notifData.unread_count || 0);
+      } catch {
+        // silent
+      }
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000); // toutes les 30s
+    return () => clearInterval(interval);
+  }, [token]);
+
   // Load user profile & data when authenticated
   useEffect(() => {
     if (token) {
@@ -191,7 +258,15 @@ export default function App() {
         console.warn('Recommandations non disponibles', e);
       }
 
-      // 5. Fetch Admin data if admin role
+      // 6. Fetch Unread Notifications count
+      try {
+        const notifData = await apiRequest('/api/v1/notifications/unread-count', 'GET', null, token);
+        setUnreadNotifCount(notifData.unread_count || 0);
+      } catch (e) {
+        console.warn('Notifications non disponibles', e);
+      }
+
+      // 7. Fetch Admin data if admin role
       if (profile.role === 'ADMIN') {
         const usersList = await apiRequest('/api/v1/admin/utilisateurs', 'GET', null, token);
         setAdminUsers(usersList);
@@ -544,16 +619,66 @@ export default function App() {
 
   if (!token) {
     if (showIntro) {
-      return <Onboarding onStart={() => setShowIntro(false)} />;
+      return (
+        <>
+          <Onboarding onStart={() => setShowIntro(false)} />
+          <LegalModal
+            isOpen={isLegalModalOpen}
+            onClose={() => setIsLegalModalOpen(false)}
+            initialTab={legalModalTab}
+          />
+          <CookieConsentBanner onOpenLegalModal={handleOpenLegalModal} />
+        </>
+      );
     }
     return (
-      <AuthCard 
-        onBack={() => setShowIntro(true)}
-        onSubmit={handleAuthSubmit}
-        loading={authLoading}
-        error={authError}
-        setError={setAuthError}
-      />
+      <>
+        {emailVerifyBanner && (
+          <div style={{
+            position: 'fixed',
+            top: 20,
+            left: 20,
+            right: 20,
+            maxWidth: 500,
+            margin: '0 auto',
+            zIndex: 9999,
+            background: 'rgba(16, 185, 129, 0.95)',
+            color: 'white',
+            padding: '12px 18px',
+            borderRadius: 14,
+            fontWeight: 700,
+            fontSize: 13,
+            boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span>{emailVerifyBanner}</span>
+            <button 
+              onClick={() => setEmailVerifyBanner(null)} 
+              style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 900 }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        <AuthCard 
+          onBack={() => setShowIntro(true)}
+          onSubmit={handleAuthSubmit}
+          loading={authLoading}
+          error={authError}
+          setError={setAuthError}
+          onOpenLegalModal={handleOpenLegalModal}
+          initialResetToken={initialResetToken}
+          initialResetEmail={initialResetEmail}
+        />
+        <LegalModal
+          isOpen={isLegalModalOpen}
+          onClose={() => setIsLegalModalOpen(false)}
+          initialTab={legalModalTab}
+        />
+        <CookieConsentBanner onOpenLegalModal={handleOpenLegalModal} />
+      </>
     );
   }
 
@@ -608,6 +733,9 @@ export default function App() {
         setTheme={setTheme}
         userProfile={userProfile}
         onLogout={handleLogout}
+        onOpenLegalModal={handleOpenLegalModal}
+        unreadNotifCount={unreadNotifCount}
+        onToggleNotifications={() => setIsNotificationCenterOpen(!isNotificationCenterOpen)}
       />
 
       {/* HEADER (Mobile Only) */}
@@ -615,7 +743,9 @@ export default function App() {
         theme={theme} 
         setTheme={setTheme} 
         userProfile={userProfile} 
-        onLogout={handleLogout} 
+        onLogout={handleLogout}
+        unreadNotifCount={unreadNotifCount}
+        onToggleNotifications={() => setIsNotificationCenterOpen(!isNotificationCenterOpen)}
       />
 
       {/* BODY CONTENT */}
@@ -1562,6 +1692,25 @@ FIN DU RAPPORT - VÉRIFICATION IMMUABLE CRSE / Impôts Sénégal`}
 
       {/* BOTTOM MOBILE NAVIGATION */}
       <BottomNav currentTab={currentTab} setCurrentTab={setCurrentTab} userProfile={userProfile} />
+
+      {/* NOTIFICATIONS CENTER */}
+      <NotificationCenter 
+        isOpen={isNotificationCenterOpen}
+        onClose={() => setIsNotificationCenterOpen(false)}
+        token={token}
+        onNavigateTab={(tab) => setCurrentTab(tab as TabType)}
+        onUnreadChange={setUnreadNotifCount}
+      />
+
+      {/* LEGAL MODAL (Mentions Légales, CDP Sénégal, CGU, Cookies) */}
+      <LegalModal
+        isOpen={isLegalModalOpen}
+        onClose={() => setIsLegalModalOpen(false)}
+        initialTab={legalModalTab}
+      />
+
+      {/* COOKIE CONSENT BANNER (CDP Sénégal) */}
+      <CookieConsentBanner onOpenLegalModal={handleOpenLegalModal} />
     </div>
   );
 }

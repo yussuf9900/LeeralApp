@@ -8,7 +8,8 @@ import {
   LogOut,
   Settings,
   Users,
-  ShieldCheck
+  ShieldCheck,
+  Scale
 } from 'lucide-react';
 import ThemeToggle from '../ui/ThemeToggle';
 
@@ -21,6 +22,9 @@ interface SidebarProps {
   setTheme: (theme: 'light' | 'dark') => void;
   userProfile: any;
   onLogout: () => void;
+  onOpenLegalModal?: (tab: 'mentions' | 'confidentialite' | 'cgu' | 'cookies') => void;
+  unreadNotifCount?: number;
+  onToggleNotifications?: () => void;
 }
 
 export default function Sidebar({
@@ -29,7 +33,10 @@ export default function Sidebar({
   theme,
   setTheme,
   userProfile,
-  onLogout
+  onLogout,
+  onOpenLegalModal,
+  unreadNotifCount,
+  onToggleNotifications
 }: SidebarProps) {
   const isAdmin = userProfile?.role === 'ADMIN';
 
@@ -76,6 +83,108 @@ export default function Sidebar({
 
       {/* Footer / Profile section */}
       <div className="sidebar-footer">
+        {/* Liens Juridiques Sénégal (CDP & CRSE) */}
+        <div style={{
+          padding: '10px 12px',
+          background: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid var(--border-color)',
+          borderRadius: 12,
+          marginBottom: 16
+        }}>
+          <button
+            type="button"
+            onClick={() => onOpenLegalModal?.('confidentialite')}
+            style={{
+              width: '100%',
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-secondary)',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: 0,
+              marginBottom: 6,
+              textAlign: 'left'
+            }}
+          >
+            <Scale size={13} color="#f59e0b" />
+            <span>Cadre Légal & CDP Sénégal</span>
+          </button>
+          <div style={{ display: 'flex', gap: 8, fontSize: 10, color: 'var(--text-muted)' }}>
+            <button
+              type="button"
+              onClick={() => onOpenLegalModal?.('mentions')}
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', padding: 0 }}
+            >
+              Mentions
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => onOpenLegalModal?.('cgu')}
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', padding: 0 }}
+            >
+              CGU
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => onOpenLegalModal?.('cookies')}
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', padding: 0 }}
+            >
+              Cookies
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>Alertes & Notifs</span>
+          <button
+            onClick={onToggleNotifications}
+            title="Centre d'alertes Leeral"
+            style={{
+              position: 'relative',
+              background: 'var(--bg-card)',
+              border: '1.5px solid var(--border-color)',
+              borderRadius: '50%',
+              width: 34,
+              height: 34,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: (unreadNotifCount || 0) > 0 ? 'var(--color-primary)' : 'var(--text-secondary)',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}
+          >
+            <Zap size={16} fill={(unreadNotifCount || 0) > 0 ? '#f59e0b' : 'none'} color="#f59e0b" />
+            {(unreadNotifCount || 0) > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: -4,
+                right: -4,
+                background: '#ef4444',
+                color: '#ffffff',
+                fontSize: 10,
+                fontWeight: 900,
+                minWidth: 16,
+                height: 16,
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0 3px',
+                border: '2px solid var(--bg-card)'
+              }}>
+                {(unreadNotifCount || 0) > 99 ? '99+' : unreadNotifCount}
+              </span>
+            )}
+          </button>
+        </div>
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>Thème</span>
           <ThemeToggle theme={theme} onChange={() => setTheme(theme === 'light' ? 'dark' : 'light')} />

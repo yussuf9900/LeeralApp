@@ -11,6 +11,11 @@ CREATE TABLE IF NOT EXISTS utilisateurs (
     is_subvented BOOLEAN NOT NULL DEFAULT false,
     ville_type VARCHAR(50) NOT NULL DEFAULT 'NON_ASSAINIE',
     budget_mensuel NUMERIC(15,2) NOT NULL DEFAULT 0.00,
+    email_verifie BOOLEAN NOT NULL DEFAULT false,
+    token_verification VARCHAR(255),
+    token_verification_expire TIMESTAMP WITH TIME ZONE,
+    token_reset_password VARCHAR(255),
+    token_reset_expire TIMESTAMP WITH TIME ZONE,
     cree_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     mis_a_jour_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -78,6 +83,12 @@ CREATE TABLE IF NOT EXISTS compteurs (
 
 -- Ensure compatibility for existing tables (in case they were created before these columns were added)
 ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS budget_mensuel NUMERIC(15,2) NOT NULL DEFAULT 0.00;
+ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS email_verifie BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS token_verification VARCHAR(255);
+ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS token_verification_expire TIMESTAMP WITH TIME ZONE;
+ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS token_reset_password VARCHAR(255);
+ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS token_reset_expire TIMESTAMP WITH TIME ZONE;
+
 ALTER TABLE tarifs ADD COLUMN IF NOT EXISTS effective_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE factures ADD COLUMN IF NOT EXISTS ancien_index NUMERIC(15,2) DEFAULT 0.00;
 ALTER TABLE factures ADD COLUMN IF NOT EXISTS nouvel_index NUMERIC(15,2) DEFAULT 0.00;
@@ -88,6 +99,18 @@ ALTER TABLE factures ADD COLUMN IF NOT EXISTS date_fin DATE;
 ALTER TABLE factures ADD COLUMN IF NOT EXISTS nombre_jours INTEGER DEFAULT 60;
 ALTER TABLE factures ADD COLUMN IF NOT EXISTS periode VARCHAR(50);
 ALTER TABLE factures ADD COLUMN IF NOT EXISTS compteur_id UUID REFERENCES compteurs(id) ON DELETE SET NULL;
+
+-- Table: notifications (In-app notifications & budget/tariff alerts)
+CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    utilisateur_id UUID NOT NULL REFERENCES utilisateurs(id) ON DELETE CASCADE,
+    titre VARCHAR(150) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(30) NOT NULL DEFAULT 'INFO',
+    lien VARCHAR(255),
+    lu BOOLEAN NOT NULL DEFAULT false,
+    cree_a TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Table: recommandations (User Recommendations & Energy Insights)
 CREATE TABLE IF NOT EXISTS recommandations (
@@ -111,6 +134,7 @@ CREATE INDEX IF NOT EXISTS idx_tarifs_service_effective ON tarifs(service, effec
 CREATE INDEX IF NOT EXISTS idx_configurations_cle_effective ON configurations(cle, effective_date DESC);
 CREATE INDEX IF NOT EXISTS idx_compteurs_utilisateur_id ON compteurs(utilisateur_id);
 CREATE INDEX IF NOT EXISTS idx_recommandations_utilisateur ON recommandations(utilisateur_id, cree_a DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(utilisateur_id, lu, cree_a DESC);
 
 
 -- Seed basic tariff values for Senelec & Sen'Eau

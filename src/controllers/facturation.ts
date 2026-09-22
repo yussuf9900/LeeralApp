@@ -4,6 +4,7 @@ import { IdempotencyManager } from '../services/idempotency';
 import { SenelecWoyofalCalculator, SenelecPostpaidCalculator } from '../services/senelec';
 import { SeneauCalculator } from '../services/seneau';
 import { RecommendationEngineService } from '../services/recommendationEngine';
+import { NotificationService } from '../services/notification';
 
 export class FacturationController {
   /**
@@ -223,6 +224,14 @@ export class FacturationController {
         );
       }
 
+      // Déclenchement asynchrone des alertes de budget et de tranches (CDP/CRSE)
+      NotificationService.verifierEtDeclencherAlertes(targetClientId, {
+        service: 'SENELEC',
+        montant: Number(calc.montant_ttc),
+        consommation: Number(calc.consommation),
+        cumulMensuelKwh: isWoyofal && calc.cumul_mensuel_apres ? Number(calc.cumul_mensuel_apres) : Number(calc.consommation)
+      }).catch((err) => console.error('[FacturationController] Alertes notification erreur:', err));
+
       res.status(201).json({
         message: isWoyofal ? 'Recharge Woyofal effectuée et enregistrée avec succès.' : 'Facture Senelec générée avec succès.',
         facture: result.rows[0],
@@ -395,6 +404,13 @@ export class FacturationController {
           [Number(nouvel_index), compteurIdVal, targetClientId]
         );
       }
+
+      // Déclenchement asynchrone des alertes de budget Sen'Eau
+      NotificationService.verifierEtDeclencherAlertes(targetClientId, {
+        service: 'SENEAU',
+        montant: Number(calc.montant_ttc),
+        consommation: Number(calc.consommation)
+      }).catch((err) => console.error('[FacturationController] Alertes notification SenEau erreur:', err));
 
       res.status(201).json({
         message: 'Facture d\'eau Sen\'Eau générée avec succès.',

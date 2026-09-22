@@ -4,6 +4,7 @@ import { FacturationController } from '../controllers/facturation';
 import { AdminController } from '../controllers/admin';
 import { DashboardController } from '../controllers/dashboard';
 import { CompteurController } from '../controllers/compteur';
+import { NotificationController } from '../controllers/notification';
 import { authMiddleware, restrictTo } from '../middlewares/auth';
 
 const router = Router();
@@ -12,6 +13,18 @@ const router = Router();
 router.post('/auth/register', AuthController.register);
 router.post('/auth/login', AuthController.login);
 router.get('/auth/profile', authMiddleware, AuthController.getProfile);
+router.post('/auth/forgot-password', AuthController.forgotPassword);
+router.post('/auth/reset-password', AuthController.resetPassword);
+router.get('/auth/verify-email', AuthController.verifyEmail);
+router.post('/auth/verify-email', AuthController.verifyEmail);
+router.post('/auth/resend-verification', AuthController.resendVerification);
+
+// --- NOTIFICATIONS ROUTES ---
+router.get('/notifications', authMiddleware, NotificationController.getNotifications);
+router.get('/notifications/unread-count', authMiddleware, NotificationController.getUnreadCount);
+router.put('/notifications/:id/read', authMiddleware, NotificationController.markAsRead);
+router.put('/notifications/read-all', authMiddleware, NotificationController.markAllAsRead);
+router.delete('/notifications/:id', authMiddleware, NotificationController.deleteNotification);
 
 // --- DASHBOARD ROUTES ---
 router.get('/dashboard/stats', authMiddleware, DashboardController.getStats);
@@ -44,4 +57,3 @@ router.put('/admin/configurations/:cle', authMiddleware, restrictTo('ADMIN'), Ad
 router.get('/admin/audit/rapport-annuel', authMiddleware, restrictTo('ADMIN'), AdminController.getAuditReport);
 
 export default router;
-
